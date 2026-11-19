@@ -426,7 +426,7 @@ export function toolCard(item, lang = DEFAULT_LANG) {
  * click can be handled client-side, on every page — no round-trip, no flash of
  * a loading screen after the first visit to a category page.
  */
-function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEFAULT_LANG, mode = 'subset', initialVisibleCount = null }) {
+function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEFAULT_LANG, mode = 'subset', initialVisibleCount = null, paginateActive = false }) {
   // On a category page only the matching section starts visible; the rest are
   // hidden up front so the server-rendered HTML already looks correct (no
   // flash of other categories before JS runs). Keyed off initialVisibleCount
@@ -438,25 +438,35 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEF
       const cards = g.tools.map((tool) => toolCard(tool, lang)).join('\n');
       const isActiveSection = !restrictToActive || g.category.slug === activeSlug;
       const hiddenAttr = isActiveSection ? '' : ' style="display:none"';
-      // A rail is a fixed preview: the first page only, never streamed. Readers
-      // who want the rest follow the "View all" link to the full category page,
-      // so the homepage keeps a stable length.
+      // Two different jobs for a section:
+      //   home  – a fixed preview of the first page, no streaming ("View all"
+      //           leads to the category page)
+      //   open  – the reader asked for this category (it is the visible one on a
+      //           category page), so it streams the remaining pages on scroll
+      const open = paginateActive && isActiveSection && g.remaining > 0;
       const shown = g.tools.length;
       const more = g.remaining > 0;
+      // Cursor for the next page; only written when this section can stream.
+      const last = shown ? g.tools[shown - 1] : null;
+      const cursorAttr = open && last
+        ? ` data-cursor="${Number(last.sort_order) || 0}:${encodeURIComponent(last.name || '')}:${last.id}"`
+        : '';
       // data-rendered is what this section actually contains — the count label
       // is based on it so a truncated rail reads "9 total", not "9 / 16". The
       // catalogue size is surfaced by the "View all" link instead.
       return `<section class="category-section" id="cat-${esc(g.category.slug)}"
         data-category="${esc(g.category.slug)}"
         data-rendered="${shown}"
-        data-total="${g.total ?? shown}"${hiddenAttr}>
+        data-total="${g.total ?? shown}"
+        ${open ? `data-has-more="1"${cursorAttr}` : ''}${hiddenAttr}>
         <div class="category-section-header">
           <span class="cat-icon">${icon(g.category.icon)}</span>
           <span class="cat-name">${esc(categoryLabel(g.category, lang))}</span>
           <span class="cat-count">${esc(t(lang, 'content.total', shown))}</span>
-          ${more ? `<a class="section-more" href="${esc(localePath(lang, `/${g.category.slug}`))}">${esc(t(lang, 'content.viewAll'))} →</a>` : ''}
+          ${more && !open ? `<a class="section-more" href="${esc(localePath(lang, `/${g.category.slug}`))}">${esc(t(lang, 'content.viewAll'))} →</a>` : ''}
         </div>
         <div class="tools-grid" data-rail-grid>${cards}</div>
+        ${open ? '<div class="rail-sentinel" data-rail-sentinel aria-hidden="true"></div>' : ''}
       </section>`;
     })
     .join('\n');
@@ -499,7 +509,7 @@ function footer(year, lang = DEFAULT_LANG, basePath = '/') {
   </footer>`;
 }
 
-function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false, mode = 'subset', initialVisibleCount = null }) {
+function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false, mode = 'subset', initialVisibleCount = null, paginateActive = false }) {
   return `${head({ title, description, canonical, jsonLd, theme, lang, gaId, noindex: unprefixed })}
 <body>
 <noscript><div style="text-align:center;padding:1rem;background:#FEF2F2;color:#991B1B">本站需要启用 JavaScript 才能使用搜索与筛选功能。</div></noscript>
@@ -511,7 +521,7 @@ function shell({ title, description, canonical, jsonLd, categories, counts, grou
     ${topbar({ categories, activeSlug, lang, basePath })}
     <main id="main-content">
       ${hero({ total, catCount: categories.length, featured, lang })}
-      ${contentArea({ groups, categories, total, activeSlug, lang, mode, initialVisibleCount })}
+      ${contentArea({ groups, categories, total, activeSlug, lang, mode, initialVisibleCount, paginateActive })}
     </main>
     ${footer(new Date().getFullYear(), lang, basePath)}
   </div>
@@ -740,8 +750,10 @@ ${pageLoader()}
 
 export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
   // Ship every category (not just this one) so switching to another category
-  // can be handled client-side, exactly like on the home page.
-  const groups = groupByCategory(categories, allTools || tools);
+  // can be handled client-side, exactly like on the home page. Each section is
+  // capped at one page; the active one streams the rest on scroll because
+  // contentArea() is told to paginate it.
+  const groups = groupByCategory(categories, allTools || tools, RAIL_PAGE_SIZE);
   const catName = categoryLabel(category, lang);
   const jsonLd = [
     {
@@ -764,6 +776,9 @@ export function categoryPage({ category, categories, counts, tools, allTools, fe
       // Full catalogue present → client-side switching, same as home.
       mode: 'all',
       initialVisibleCount: tools.length,
+      // The reader explicitly asked for this category, so its section streams
+      // the remaining tools on scroll (the home page does not).
+      paginateActive: true,
     }),
     { headers: { 'content-type': 'text/html; charset=utf-8' } }
   );

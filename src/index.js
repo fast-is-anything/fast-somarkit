@@ -4,7 +4,7 @@
 
 import { esc, json, redirect, getCookie, setCookie, sign, secureIfHttps } from './lib/crypto.js';
 import {
-  listCategories, listCategoriesPage, countToolsByCategory, listPublishedTools, listFeaturedTools, listTrendingTools,
+  listCategories, listCategoriesPage, countToolsByCategory, listPublishedTools, listFeaturedTools, listToolsPage, listTrendingTools,
   getToolBySlug, getTool, listToolsAdmin, createTool, updateTool, deleteTool,
   incrementVisits, getCategoryBySlug, getCategory, createCategory, updateCategory,
   deleteCategory, slugify, logAudit, listAudit, listAuditPage, dashboardStats, topTools,
@@ -21,7 +21,7 @@ import {
   localizeTool, localizeTools, localizeCategory, localizeCategories,
 } from './lib/localize.js';
 import { ICONS } from './lib/icons.js';
-import { homePage, toolPage, categoryPage, aboutPage, notFoundPage, submitPage, submitSuccessPage } from './templates/public.js';
+import { homePage, toolPage, categoryPage, aboutPage, notFoundPage, submitPage, submitSuccessPage, toolCard, RAIL_PAGE_SIZE } from './templates/public.js';
 import {
   dashboardPage, toolsPage, toolFormPage, categoriesPage, categoryFormPage,
   auditPage, adminsPage, loginPage,
@@ -194,6 +194,45 @@ async function router(request, env, ctx) {
         description: t.description, category: t.category_name, pricing: t.pricing,
       }));
     return json({ query: q, count: results.length, results });
+  }
+
+  // Category page pagination.
+  //
+  //   GET /zh/api/rail?category=ai-chat&cursor=<sortOrder>:<name>:<id>&limit=9
+  //
+  // Returns one page of cards as HTML plus the next cursor. Only an open
+  // category page uses this — the homepage rails are a fixed preview.
+  if ((pubPath === '/api/rail' || path === '/api/rail') && method === 'GET') {
+    const slug = String(url.searchParams.get('category') || '');
+    if (!slug) return json({ ok: false, error: 'category required' }, 400);
+    const limit = Math.max(1, Math.min(30, Number(url.searchParams.get('limit')) || RAIL_PAGE_SIZE));
+
+    // Cursor is "sortOrder:<name>:<id>"; opaque to the client.
+    let after = null;
+    const raw = url.searchParams.get('cursor');
+    if (raw) {
+      const [s, name, i] = String(raw).split(':');
+      const sortOrder = Number(s);
+      const id = Number(i);
+      if (Number.isFinite(sortOrder) && Number.isFinite(id)) {
+        after = { sortOrder, name: decodeURIComponent(name || ''), id };
+      }
+    }
+
+    const category = await getCategoryBySlug(env.DB, slug);
+    if (!category) return json({ ok: false, error: 'unknown category' }, 404);
+
+    const { tools, nextCursor } = await listToolsPage(env.DB, { categoryId: category.id, limit, after });
+    const localized = localizeTools(tools, lang);
+    return json({
+      ok: true,
+      category: slug,
+      html: localized.map((x) => toolCard(x, lang)).join(''),
+      count: localized.length,
+      nextCursor: nextCursor
+        ? `${nextCursor.sortOrder}:${encodeURIComponent(nextCursor.name)}:${nextCursor.id}`
+        : null,
+    });
   }
 
   // --------------------------------------------------------------- admin ---

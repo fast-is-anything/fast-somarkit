@@ -170,6 +170,68 @@ export async function listPublishedTools(db) {
   return (results || []).map(rowToTool);
 }
 
+/**
+ * One page of published tools for a category page's infinite scroll.
+ *
+ * Keyset pagination on (sort_order, name, id) rather than OFFSET: the cursor
+ * stays correct when rows are inserted or re-sorted between requests, and the
+ * query cost does not grow with the page number. The ordering matches what the
+ * server-rendered first page used, so page 2 continues exactly where it stopped.
+ *
+ * @param {object} opts
+ *   categoryId  restrict to one category
+ *   limit       page size
+ *   after       cursor from a previous call: { sortOrder, name, id }
+ * @returns {{ tools: object[], nextCursor: object|null }}
+ */
+export async function listToolsPage(db, { categoryId = null, limit = 9, after = null } = {}) {
+  const size = Math.max(1, Math.min(60, Number(limit) || 9));
+  const where = ["t.status = 'published'"];
+  const binds = [];
+
+  if (categoryId != null) {
+    where.push('t.category_id = ?');
+    binds.push(categoryId);
+  }
+  if (after && Number.isFinite(after.sortOrder) && after.id != null) {
+    // Strictly "after" the cursor in (sort_order, name, id) order. The name
+    // comparison mirrors SQLite's default BINARY collation on the same text.
+    where.push(
+      `(t.sort_order > ?
+        OR (t.sort_order = ? AND t.name > ?)
+        OR (t.sort_order = ? AND t.name = ? AND t.id > ?))`
+    );
+    binds.push(
+      after.sortOrder,
+      after.sortOrder, after.name ?? '',
+      after.sortOrder, after.name ?? '', after.id
+    );
+  }
+
+  // Fetch one extra row to learn whether another page exists.
+  const { results } = await db
+    .prepare(
+      `SELECT t.*, c.name AS category_name, c.slug AS category_slug
+       FROM tools t LEFT JOIN categories c ON c.id = t.category_id
+       WHERE ${where.join(' AND ')}
+       ORDER BY t.sort_order, t.name, t.id
+       LIMIT ?`
+    )
+    .bind(...binds, size + 1)
+    .all();
+
+  const rows = results || [];
+  const hasMore = rows.length > size;
+  const page = hasMore ? rows.slice(0, size) : rows;
+  const last = page[page.length - 1];
+
+  return {
+    tools: page.map(rowToTool),
+    nextCursor: hasMore && last
+      ? { sortOrder: Number(last.sort_order) || 0, name: String(last.name ?? ''), id: last.id }
+      : null,
+  };
+}
 
 /** Number of published tools per category (for the "全部" buttons). */
 export async function countPublishedByCategory(db) {

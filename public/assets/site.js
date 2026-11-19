@@ -538,4 +538,64 @@
       }
     } catch (err) {}
   });
+
+  /* ------------------------------------------- category page infinite scroll */
+  /*
+   * Only the section the reader opened carries data-has-more (see
+   * contentArea): a category page marks its active category, the homepage marks
+   * nothing. A sentinel under that grid starts an IntersectionObserver that
+   * appends the next page, so the homepage keeps a fixed preview while a
+   * category page can be browsed in full.
+   */
+  (function initRail() {
+    var sec = document.querySelector('.category-section[data-has-more="1"]');
+    if (!sec || !('IntersectionObserver' in window)) return;
+
+    var localeMatch = location.pathname.match(LOCALE_RE);
+    var locale = localeMatch ? localeMatch[1] : 'zh';
+    var RAIL_API = '/' + locale + '/api/rail';
+    var grid = sec.querySelector('[data-rail-grid]');
+    var sentinel = sec.querySelector('[data-rail-sentinel]');
+    if (!grid || !sentinel) return;
+
+    function loadMore() {
+      if (sec.dataset.loading === '1' || sec.dataset.done === '1') return;
+      sec.dataset.loading = '1';
+
+      var params = new URLSearchParams({ category: sec.getAttribute('data-category') });
+      if (sec.dataset.cursor) params.set('cursor', sec.dataset.cursor);
+
+      fetch(RAIL_API + '?' + params.toString(), { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          sec.dataset.loading = '0';
+          if (!data || !data.ok) { sec.dataset.done = '1'; return; }
+
+          if (data.html) grid.insertAdjacentHTML('beforeend', data.html);
+
+          // Keep data-rendered in step so the section header count stays right.
+          // The label is formatted by the same dict entry the server used, so
+          // the wording stays in the page's language.
+          var rendered = grid.querySelectorAll('.tool-card').length;
+          sec.setAttribute('data-rendered', rendered);
+          var cnt = sec.querySelector('.cat-count');
+          if (cnt) cnt.textContent = T.total(rendered);
+
+          if (data.nextCursor) {
+            sec.dataset.cursor = data.nextCursor;
+          } else {
+            sec.dataset.done = '1';
+            sec.removeAttribute('data-has-more');
+            sentinel.remove();
+          }
+        })
+        .catch(function () { sec.dataset.loading = '0'; });
+    }
+
+    new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting) { loadMore(); break; }
+      }
+    }, { rootMargin: '300px 0px' }).observe(sentinel);
+  })();
 })();

@@ -934,6 +934,10 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 }
 .category-section-header .section-more:hover { color: var(--color-primary); }
 
+/* Sentinel watched by the category page's infinite scroll. Zero-height and
+   invisible: it only marks where the next page gets appended. */
+.rail-sentinel { height: 1px; margin-top: 8px; }
+
 .tools-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
