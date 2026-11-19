@@ -35,17 +35,27 @@
     if (!shell) return;
     shell.classList.toggle('collapsed', v);
     try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch (e) {}
-    var btns = document.querySelectorAll('[data-ad-collapse]');
-    for (var i = 0; i < btns.length; i++) {
-      btns[i].setAttribute('aria-expanded', v ? 'false' : 'true');
-      btns[i].setAttribute('title', v ? '展开侧边栏 (Ctrl+B)' : '折叠侧边栏 (Ctrl+B)');
-      btns[i].setAttribute('aria-label', v ? '展开侧边栏' : '折叠侧边栏');
+    // The sidebar collapse button is hidden once collapsed; the logo then
+    // takes over as the expand control (see the click handler below).
+    var btn = document.querySelector('[data-ad-collapse]');
+    if (btn) {
+      btn.setAttribute('aria-expanded', v ? 'false' : 'true');
+      btn.setAttribute('title', v ? '展开侧边栏 (Ctrl+B)' : '折叠侧边栏 (Ctrl+B)');
+      btn.setAttribute('aria-label', v ? '展开侧边栏' : '折叠侧边栏');
     }
-    // The logo becomes the expand control while the rail is collapsed.
     var brand = document.getElementById('adBrand');
-    if (brand) brand.setAttribute('title', v ? '展开侧边栏' : 'SoMarkIt 管理后台');
+    if (brand && v) {
+      brand.setAttribute('title', '展开侧边栏 (Ctrl+B)');
+      brand.setAttribute('aria-label', '展开侧边栏');
+    } else if (brand) {
+      brand.setAttribute('title', 'SoMarkIt 管理后台');
+      brand.removeAttribute('aria-label');
+    }
   }
   function isCollapsed() { return shell && shell.classList.contains('collapsed'); }
+  // The off-canvas drawer (<=900px) reuses .collapsed for its animation, but
+  // there the collapse controls stay hidden and the logo is a plain link home.
+  function isDrawer() { return window.innerWidth <= 900; }
 
   try {
     if (localStorage.getItem(COLLAPSE_KEY) === '1' && window.innerWidth > 900) {
@@ -62,7 +72,7 @@
       return;
     }
     // Collapsed rail: clicking the logo expands instead of navigating.
-    if (t.closest('#adBrand') && isCollapsed()) {
+    if (t.closest('#adBrand') && isCollapsed() && !isDrawer()) {
       e.preventDefault();
       setCollapsed(false);
       return;
@@ -81,6 +91,7 @@
   document.addEventListener('keydown', function (e) {
     // Ctrl/Cmd + B toggles the sidebar, like an editor
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      if (!shell || isDrawer()) return;
       e.preventDefault();
       setCollapsed(!isCollapsed());
     }
@@ -89,6 +100,89 @@
   window.addEventListener('resize', function () {
     if (window.innerWidth > 900 && shell) shell.classList.remove('nav-open');
   });
+
+  /* ------------------------------------------------------ page transition --
+   * Same pattern as the public site: as soon as a sidebar link is clicked the
+   * new item becomes active instantly, then the loading overlay fades in while
+   * the next document is fetched. Without this the old selection and the old
+   * page stay on screen until the network round-trip finishes.
+   */
+  var navLinks = document.querySelectorAll('.ad-nav-item[data-match]');
+
+  // Longest data-match prefix wins (needed once /admin/tools and /admin/admins
+  // both extend /admin).
+  function matchNavFor(pathname) {
+    var best = null, bestLen = -1;
+    for (var i = 0; i < navLinks.length; i++) {
+      var m = navLinks[i].getAttribute('data-match');
+      if (pathname === m || (m !== '/admin' && pathname.indexOf(m) === 0)) {
+        if (m.length > bestLen) { best = navLinks[i]; bestLen = m.length; }
+      }
+    }
+    return best;
+  }
+
+  function markNavSelected(link) {
+    for (var i = 0; i < navLinks.length; i++) {
+      var on = navLinks[i] === link;
+      navLinks[i].classList.toggle('active', on);
+      if (on) navLinks[i].setAttribute('aria-current', 'page');
+      else navLinks[i].removeAttribute('aria-current');
+    }
+  }
+
+  function setContentLoading(on) {
+    if (!document.body) return;
+    document.body.classList.toggle('is-loading', on);
+    var main = document.getElementById('adContent');
+    if (main) main.setAttribute('aria-busy', on ? 'true' : 'false');
+    var loader = document.getElementById('adLoader');
+    if (loader) loader.setAttribute('aria-hidden', on ? 'false' : 'true');
+  }
+
+  function beginNavigation() {
+    setContentLoading(true);
+    // Let the overlay prove the click landed; if the next document takes
+    // longer than this the loader stays up anyway.
+    setTimeout(function () {
+      var txt = document.querySelector('.ad-loader-text');
+      if (txt) txt.textContent = '正在加载…';
+    }, 4000);
+  }
+
+  function isPlainNavigation(e) {
+    return !(e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey ||
+             e.shiftKey || e.altKey || (e.target && e.target.closest &&
+             e.target.closest('[target="_blank"], [data-no-loader]')));
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t.closest || !isPlainNavigation(e)) return;
+    var link = t.closest('.ad-nav-item[data-match]');
+    if (!link) return;
+    var href = link.getAttribute('href');
+    if (!href || href.charAt(0) !== '/') return;
+
+    var here = location.pathname + location.search;
+    if (href === here || href === location.pathname) {
+      e.preventDefault();
+      return;
+    }
+    // 1) paint the selection, 2) show the loader, 3) navigate after two frames
+    //    so both are on screen before the old document is torn down.
+    e.preventDefault();
+    markNavSelected(link);
+    if (shell) shell.classList.remove('nav-open');
+    beginNavigation();
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { window.location.href = href; });
+    });
+  });
+
+  // Back/forward restores a cached page; make sure no stale overlay lingers.
+  window.addEventListener('pageshow', function () { setContentLoading(false); });
+  window.addEventListener('pagehide', function () { setContentLoading(false); });
 
   /* --------------------------------------------------------- confirmations */
   document.addEventListener('submit', function (e) {
@@ -150,16 +244,9 @@
   });
 
   /* ---------------------------------------------- nav item active state */
-  // Mark the current sidebar link active based on pathname
+  // Mark the current sidebar link active based on pathname (on first paint the
+  // server usually got this right, but a direct hit on a deep link may not).
   var path = location.pathname;
-  var links = document.querySelectorAll('.ad-nav-item[data-match]');
-  var best = null, bestLen = -1;
-  for (var i = 0; i < links.length; i++) {
-    var m = links[i].getAttribute('data-match');
-    if (path === m || (m !== '/admin' && path.indexOf(m) === 0)) {
-      if (m.length > bestLen) { best = links[i]; bestLen = m.length; }
-    }
-  }
-  for (var j = 0; j < links.length; j++) links[j].classList.remove('active');
-  if (best) best.classList.add('active');
+  var best = matchNavFor(path);
+  if (best) markNavSelected(best);
 })();

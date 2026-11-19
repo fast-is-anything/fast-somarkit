@@ -118,6 +118,8 @@ button { font-family: inherit; }
 .ad-brand-sub { font-size: 10px; font-weight: 500; color: var(--ad-sidebar-text); letter-spacing: .04em; text-transform: uppercase; }
 .ad-brand-text { overflow: hidden; }
 
+/* Collapse control: only shown while the sidebar is expanded. Once collapsed,
+   the logo itself becomes the expand control. */
 .ad-collapse-btn {
   display: grid; place-items: center;
   width: 28px; height: 28px; flex-shrink: 0;
@@ -127,6 +129,30 @@ button { font-family: inherit; }
   cursor: pointer; transition: all .15s ease;
 }
 .ad-collapse-btn:hover { background: var(--ad-sidebar-hover); color: var(--ad-sidebar-text-active); }
+
+/* Collapsed */
+.ad-shell.collapsed { --ad-sidebar-w: var(--ad-sidebar-w-collapsed); }
+.ad-shell.collapsed .ad-brand-text,
+.ad-shell.collapsed .ad-nav-text,
+.ad-shell.collapsed .ad-nav-badge,
+.ad-shell.collapsed .ad-nav-label,
+.ad-shell.collapsed .ad-user-meta,
+.ad-shell.collapsed .ad-logout,
+.ad-shell.collapsed .ad-collapse-btn { display: none; }
+.ad-shell.collapsed .ad-sidebar-top { justify-content: center; padding: 0; }
+.ad-shell.collapsed .ad-brand {
+  flex: 0 0 auto;
+  padding: 5px; margin: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .15s ease, transform .15s ease;
+}
+.ad-shell.collapsed .ad-brand:hover { background: rgba(255, 255, 255, .12); transform: scale(1.04); }
+.ad-shell.collapsed .ad-brand:active { transform: scale(.96); }
+.ad-shell.collapsed .ad-nav-item { justify-content: center; padding: 0; height: 40px; }
+.ad-shell.collapsed .ad-nav { padding: 12px 12px; }
+.ad-shell.collapsed .ad-nav-label { padding: 8px 0 0; height: 1px; overflow: hidden; }
+.ad-shell.collapsed .ad-user { justify-content: center; padding: 8px 0; }
 
 .ad-nav {
   flex: 1; overflow-y: auto; overflow-x: hidden;
@@ -173,10 +199,14 @@ button { font-family: inherit; }
   flex-shrink: 0; padding: 10px;
   border-top: 1px solid var(--ad-sidebar-divider);
 }
+/* User card with the logout button vertically centred on its right edge. */
+.ad-user-row {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+}
 .ad-user {
   display: flex; align-items: center; gap: 10px;
   padding: 8px; border-radius: 8px;
-  min-width: 0;
+  min-width: 0; flex: 1;
 }
 .ad-user:hover { background: var(--ad-sidebar-hover); }
 .ad-avatar {
@@ -199,34 +229,6 @@ button { font-family: inherit; }
   transition: all .15s ease;
 }
 .ad-logout:hover { background: var(--ad-danger-soft); color: var(--ad-danger); }
-
-/* Collapsed */
-.ad-shell.collapsed { --ad-sidebar-w: var(--ad-sidebar-w-collapsed); }
-.ad-shell.collapsed .ad-brand-text,
-.ad-shell.collapsed .ad-nav-text,
-.ad-shell.collapsed .ad-nav-badge,
-.ad-shell.collapsed .ad-nav-label,
-.ad-shell.collapsed .ad-user-meta,
-.ad-shell.collapsed .ad-logout,
-.ad-shell.collapsed .ad-collapse-btn { display: none; }
-.ad-shell.collapsed .ad-sidebar-top { justify-content: center; padding: 0; }
-.ad-shell.collapsed .ad-brand { flex: 0 0 auto; }
-/* Collapsed rail: logo doubles as the expand control. */
-.ad-shell.collapsed .ad-brand {
-  padding: 3px;
-  border-radius: 8px;
-  transition: background .15s ease, transform .15s ease;
-}
-.ad-shell.collapsed .ad-brand:hover { background: rgba(255, 255, 255, .1); transform: scale(1.05); }
-.ad-shell.collapsed .ad-brand:active { transform: scale(.97); }
-.ad-shell.collapsed .ad-nav-item { justify-content: center; padding: 0; height: 40px; }
-.ad-shell.collapsed .ad-nav { padding: 12px 12px; }
-.ad-shell.collapsed .ad-nav-label { padding: 8px 0 0; height: 1px; overflow: hidden; }
-.ad-shell.collapsed .ad-user { justify-content: center; padding: 8px 0; }
-.ad-shell.collapsed .ad-float-toggle { display: grid !important; }
-
-/* Collapsed-state expand affordance lives on the topbar */
-.ad-float-toggle { display: none !important; }
 
 .ad-main {
   flex: 1; min-width: 0;
@@ -581,11 +583,105 @@ table.ad-table {
   transition: all .15s ease;
 }
 .ad-google-btn:hover { background: var(--ad-surface-2); box-shadow: var(--ad-shadow); }
+/* local-only dev login (rendered only when DEV_LOGIN_EMAIL is present) */
+.ad-dev-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  position: relative;
+  width: 100%; height: 40px; margin-top: 10px;
+  border-radius: 9px;
+  border: 1px dashed var(--ad-border);
+  background: transparent;
+  color: var(--ad-text-2);
+  font-size: 13px; font-weight: 500; font-family: inherit;
+  text-decoration: none;
+  transition: all .15s ease;
+}
+.ad-dev-btn:hover {
+  color: var(--ad-text);
+  border-color: #6366F1;
+  background: rgba(99, 102, 241, .08);
+}
+.ad-dev-btn svg { opacity: .75; }
+.ad-dev-tag {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-size: 9px; letter-spacing: .08em; font-weight: 600;
+  padding: 2px 5px; border-radius: 4px;
+  color: #4F46E5; background: rgba(99, 102, 241, .12);
+}
+[data-ad-theme="dark"] .ad-dev-tag { color: #A5B4FC; background: rgba(99, 102, 241, .22); }
 .ad-login-foot { margin-top: 22px; font-size: 11.5px; color: var(--ad-text-3); line-height: 1.7; }
 
 /* mobile */
 .ad-overlay { display: none; position: fixed; inset: 0; z-index: 55; background: rgba(2, 6, 23, .5); }
 .ad-mobile-toggle { display: none; }
+
+/* ------------------------------------------------------- page transition */
+/* Covers the main column only, so the rail (and the freshly-selected nav
+   item) stays visible — the click visibly "lands" before the page swaps. */
+.ad-loader {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: var(--ad-sidebar-w);
+  z-index: 60;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+  background: color-mix(in srgb, var(--ad-bg) 92%, transparent);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity .18s ease;
+  pointer-events: auto;
+}
+body.is-loading .ad-loader { display: flex; opacity: 1; }
+
+/* Thin indeterminate progress bar pinned under the topbar. */
+.ad-loader-bar {
+  position: absolute; top: 60px; left: 0; right: 0; height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ad-primary) 12%, transparent);
+}
+.ad-loader-bar span {
+  position: absolute; top: 0; left: 0; height: 100%; width: 38%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--ad-primary), transparent);
+  animation: ad-loading-bar 1.1s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+@keyframes ad-loading-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(320%); }
+}
+
+.ad-loader-box {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: var(--ad-surface);
+  border: 1px solid var(--ad-border);
+  box-shadow: var(--ad-shadow-lg);
+}
+.ad-loader-spin {
+  width: 16px; height: 16px; flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--ad-primary) 22%, transparent);
+  border-top-color: var(--ad-primary);
+  animation: ad-loader-spin .7s linear infinite;
+}
+@keyframes ad-loader-spin { to { transform: rotate(360deg); } }
+.ad-loader-text {
+  font-size: 13px; font-weight: 500; color: var(--ad-text-2);
+  letter-spacing: .01em;
+}
+
+/* Below the drawer breakpoint the rail is off-canvas, so cover everything. */
+@media (max-width: 900px) {
+  .ad-loader { left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ad-loader-bar span, .ad-loader-spin { animation-duration: 2.4s; }
+  .ad-loader { transition: none; }
+}
 
 @media (max-width: 900px) {
   .ad-shell { --ad-sidebar-w: 0px; }
@@ -593,6 +689,12 @@ table.ad-table {
   .ad-shell.nav-open .ad-sidebar { transform: translateX(0); }
   .ad-shell.nav-open .ad-overlay { display: block; }
   .ad-main { margin-left: 0; }
+  /* On narrow screens the off-canvas drawer is driven by the menu button;
+     the logo keeps navigating to /admin as usual. */
+  .ad-brand { flex: 1; cursor: default; }
+  .ad-brand:hover { background: transparent; }
+  .ad-brand:active { transform: none; }
+  .ad-collapse-btn { display: none; }
   .ad-mobile-toggle { display: grid; }
   .ad-content { padding: 16px; }
   .ad-topbar { padding: 0 14px; }

@@ -88,16 +88,15 @@ document.documentElement.setAttribute('data-ad-theme',t);}catch(e){}})();
     </div>
     <nav class="ad-nav">${nav}</nav>
     <div class="ad-sidebar-foot">
-      <a class="ad-user" href="/" target="_blank" rel="noopener" title="查看站点">
-        ${avatar(user)}
-        <span class="ad-user-meta">
-          <div class="ad-user-name">${esc(user?.name || user?.email || '')}</div>
-          <div class="ad-user-role">${user?.role === 'owner' ? '站点所有者' : '编辑'}</div>
-        </span>
-      </a>
-      <div style="display:flex;align-items:center;gap:6px;padding:2px">
+      <div class="ad-user-row">
+        <a class="ad-user" href="/" target="_blank" rel="noopener" title="查看站点">
+          ${avatar(user)}
+          <span class="ad-user-meta">
+            <div class="ad-user-name">${esc(user?.name || user?.email || '')}</div>
+            <div class="ad-user-role">${user?.role === 'owner' ? '站点所有者' : '编辑'}</div>
+          </span>
+        </a>
         <a class="ad-logout" href="/admin/logout" title="退出登录" aria-label="退出登录">${UI.logout}</a>
-        <a class="ad-logout" href="/" target="_blank" rel="noopener" title="访问前台站点" aria-label="访问前台站点">${UI.externalLink}</a>
       </div>
     </div>
   </aside>
@@ -107,7 +106,6 @@ document.documentElement.setAttribute('data-ad-theme',t);}catch(e){}})();
   <div class="ad-main">
     <header class="ad-topbar">
       <button class="ad-icon-btn ad-mobile-toggle" data-ad-nav-open type="button" aria-label="打开导航">${UI.menu}</button>
-      <button class="ad-icon-btn ad-float-toggle" data-ad-collapse type="button" aria-label="展开侧边栏" title="展开侧边栏 (Ctrl+B)">${UI.panelLeft}</button>
       <div style="min-width:0">
         <h1>${esc(title)}</h1>
         ${breadcrumb ? `<div class="ad-crumb">${breadcrumb}</div>` : ''}
@@ -120,7 +118,14 @@ document.documentElement.setAttribute('data-ad-theme',t);}catch(e){}})();
         <a class="ad-icon-btn" href="/" target="_blank" rel="noopener" aria-label="访问前台" title="访问前台">${UI.externalLink}</a>
       </div>
     </header>
-    <main class="ad-content">${children}</main>
+    <main class="ad-content" id="adContent">${children}</main>
+  </div>
+</div>
+<div class="ad-loader" id="adLoader" aria-hidden="true">
+  <div class="ad-loader-bar"><span></span></div>
+  <div class="ad-loader-box">
+    <span class="ad-loader-spin"></span>
+    <span class="ad-loader-text">加载中…</span>
   </div>
 </div>
 <div class="ad-toast" id="adToast" role="status" aria-live="polite"></div>
@@ -132,6 +137,20 @@ document.documentElement.setAttribute('data-ad-theme',t);}catch(e){}})();
 // --- login ------------------------------------------------------------------
 
 export function loginPage({ env, error = '', next = '/admin' }) {
+  // Local-only login shortcut. Rendered only when DEV_LOGIN_EMAIL is set, which
+  // happens exclusively via the committed .dev.vars file used by `wrangler dev`.
+  const devEmail = String(env.DEV_LOGIN_EMAIL || '').trim();
+  const devButton = devEmail
+    ? `<a class="ad-dev-btn" href="/admin/dev-login">
+       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+         <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+       </svg>
+       本地登录（开发）
+       <span class="ad-dev-tag">LOCAL</span>
+     </a>`
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="zh-CN" data-ad-theme="light">
 <head>
@@ -163,6 +182,7 @@ document.documentElement.setAttribute('data-ad-theme',t);}catch(e){}})();
       </svg>
       使用 Google 账号登录
     </a>
+    ${devButton}
     <div class="ad-login-foot">
       仅限已授权的管理员邮箱访问。<br>
       登录后可使用 Google 账号管理工具收录与分类。
