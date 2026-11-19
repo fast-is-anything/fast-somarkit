@@ -217,9 +217,13 @@
       s.style.display = okCat && any ? '' : 'none';
       var cnt = s.querySelector('.cat-count');
       if (cnt) {
-        var total = s.getAttribute('data-total');
-        var n = s.querySelectorAll('.tool-card:not([style*="display: none"])').length;
-        cnt.textContent = (n === +(total || 0)) ? T.total(n) : T.matched(n, total);
+        // Count relative to what this section actually contains, not to the
+        // category's full size. A rail deliberately renders only its first
+        // page, so comparing against the catalogue total would print
+        // "9 / 16" on an unfiltered homepage.
+        var rendered = s.getAttribute('data-rendered') || s.querySelectorAll('.tool-card').length;
+        var visible = s.querySelectorAll('.tool-card:not([style*="display: none"])').length;
+        cnt.textContent = visible === +rendered ? T.total(visible) : T.matched(visible, rendered);
       }
     });
 

@@ -443,13 +443,17 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEF
       // so the homepage keeps a stable length.
       const shown = g.tools.length;
       const more = g.remaining > 0;
+      // data-rendered is what this section actually contains — the count label
+      // is based on it so a truncated rail reads "9 total", not "9 / 16". The
+      // catalogue size is surfaced by the "View all" link instead.
       return `<section class="category-section" id="cat-${esc(g.category.slug)}"
         data-category="${esc(g.category.slug)}"
+        data-rendered="${shown}"
         data-total="${g.total ?? shown}"${hiddenAttr}>
         <div class="category-section-header">
           <span class="cat-icon">${icon(g.category.icon)}</span>
           <span class="cat-name">${esc(categoryLabel(g.category, lang))}</span>
-          <span class="cat-count">${esc(t(lang, 'content.total', g.total ?? shown))}</span>
+          <span class="cat-count">${esc(t(lang, 'content.total', shown))}</span>
           ${more ? `<a class="section-more" href="${esc(localePath(lang, `/${g.category.slug}`))}">${esc(t(lang, 'content.viewAll'))} →</a>` : ''}
         </div>
         <div class="tools-grid" data-rail-grid>${cards}</div>
