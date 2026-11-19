@@ -528,33 +528,27 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
           <div class="ad-card">
             <div class="ad-card-head">
               <h2>评测正文</h2><span class="spacer"></span>
-              <span class="an-note">Markdown · 中英双语</span>
+              <span class="an-note">Markdown · ${LANGS.map((l) => esc(l.short)).join(' / ')}</span>
               <button class="ad-btn ad-btn-sm ad-btn-primary" type="button" data-md-open>${UI.edit}打开编辑器</button>
             </div>
             <div class="ad-card-body">
               <div class="ad-hint" style="margin-bottom:12px">
                 评测正文显示在详情页的产品卡片与信息卡片之间，支持标题、列表、表格、图片。
               </div>
-              <!-- One block per language so a missing translation is obvious. -->
-              <div class="ad-md-block">
+              <!-- One block per language so a missing translation is obvious.
+                   Generated from LANGS, so a new locale appears automatically. -->
+              ${LANGS.map((l, i) => {
+                const cap = l.code.charAt(0).toUpperCase() + l.code.slice(1);
+                return `<div class="ad-md-block">
                 <div class="ad-md-lang-row">
-                  <span class="ad-md-lang-tag">中文</span>
-                  <div class="ad-hint" data-md-status="zh"></div>
+                  <span class="ad-md-lang-tag">${esc(l.label)}</span>
+                  <div class="ad-hint" data-md-status="${esc(l.code)}"></div>
                   <span class="spacer"></span>
                   <button class="ad-btn ad-btn-sm ad-btn-ghost" type="button" data-md-open>编辑</button>
                 </div>
-                <pre class="ad-md-preview" id="mdPreviewZh" aria-label="中文 Markdown 预览（前 10 行）"></pre>
-              </div>
-
-              <div class="ad-md-block">
-                <div class="ad-md-lang-row">
-                  <span class="ad-md-lang-tag">English</span>
-                  <div class="ad-hint" data-md-status="en"></div>
-                  <span class="spacer"></span>
-                  <button class="ad-btn ad-btn-sm ad-btn-ghost" type="button" data-md-open>编辑</button>
-                </div>
-                <pre class="ad-md-preview" id="mdPreviewEn" aria-label="English Markdown 预览（前 10 行）"></pre>
-              </div>
+                <pre class="ad-md-preview" id="mdPreview${cap}" aria-label="${esc(l.label)} Markdown 预览（前 10 行）"></pre>
+              </div>`;
+              }).join('\n              ')}
               <div class="ad-hint" id="mdMore" hidden></div>
             </div>
           </div>
@@ -667,14 +661,16 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
       <style>@media(max-width:1000px){.form-grid{grid-template-columns:1fr!important}}</style>
 
       <!-- Full-screen Markdown editor with one tab per site language. Each
-           textarea lives inside the form, so both languages submit together
-           with the rest of the fields. -->
+           textarea lives inside the form, so every language submits together
+           with the rest of the fields. The tab strip, the textareas and the
+           preview panes are all generated from LANGS, so adding a locale needs
+           no change here. -->
       <div class="ad-mdeditor" id="mdModal" hidden>
         <div class="ad-mdeditor-head">
           <h2>编辑评测正文 · Markdown</h2>
           <div class="ad-md-tabs" role="tablist">
-            <button class="ad-md-tab is-active" type="button" role="tab" data-md-lang="zh" aria-selected="true">中文</button>
-            <button class="ad-md-tab" type="button" role="tab" data-md-lang="en" aria-selected="false">English</button>
+            ${LANGS.map((l, i) => `<button class="ad-md-tab ${i === 0 ? 'is-active' : ''}" type="button" role="tab"
+              data-md-lang="${esc(l.code)}" aria-selected="${i === 0 ? 'true' : 'false'}">${esc(l.label)}</button>`).join('')}
           </div>
           <span class="ad-md-count" id="mdCount">0 行 · 0 字</span>
           <span class="spacer"></span>
@@ -683,10 +679,15 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
           <button class="ad-btn ad-btn-sm ad-btn-primary" type="button" data-md-save>保存</button>
         </div>
         <div class="ad-mdeditor-main">
-          <textarea class="ad-mdeditor-input" id="mdEditorZh" name="review_md" spellcheck="false" data-md-input="zh"
-            placeholder="# 评测标题&#10;&#10;这里写这个工具的深度评测……&#10;&#10;## 优点&#10;- 第一点&#10;- 第二点&#10;&#10;## 缺点&#10;- 第一点"></textarea>
-          <textarea class="ad-mdeditor-input" id="mdEditorEn" name="review_md_en" spellcheck="true" data-md-input="en" hidden
-            placeholder="# Review title&#10;&#10;Write the in-depth review here……&#10;&#10;## Pros&#10;- First point&#10;- Second point&#10;&#10;## Cons&#10;- First point"></textarea>
+          ${LANGS.map((l, i) => `<textarea class="ad-mdeditor-input" id="mdEditor_${esc(l.code)}"
+            name="review_md${i === 0 ? '' : `_${esc(l.code)}`}" spellcheck="${l.code === 'zh' ? 'false' : 'true'}"
+            data-md-input="${esc(l.code)}" ${i === 0 ? '' : 'hidden'}
+            placeholder="${i === 0
+              // Line breaks must be entities: a literal newline inside an
+              // attribute value is kept as-is by the parser and shows up as a
+              // real newline in the placeholder, which breaks the textarea.
+              ? '# 评测标题&#10;&#10;这里写这个工具的深度评测……&#10;&#10;## 优点&#10;- 第一点&#10;- 第二点&#10;&#10;## 缺点&#10;- 第一点'
+              : esc(`Review in ${l.label} (optional)`)}"></textarea>`).join('\n          ')}
           <div class="ad-mdeditor-preview" id="mdLive" aria-live="polite"></div>
         </div>
         <div class="ad-mdeditor-foot">
@@ -694,7 +695,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
           <input type="file" id="mdImage" accept="${ACCEPT_ATTR}" hidden>
           <span class="ad-md-hint" id="mdUploadHint">图片上传至 R2，最大 ${MAX_LABEL.review}</span>
           <span class="spacer"></span>
-          <span class="ad-md-hint" id="mdActiveLang">正在编辑：中文</span>
+          <span class="ad-md-hint" id="mdActiveLang">正在编辑：${esc(LANGS[0].label)}</span>
         </div>
       </div>
     </form>
@@ -787,13 +788,24 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
       })();
 
       /* ---------------------------------------------------- markdown editor */
-      /* Bilingual: one textarea per site language (zh / en). Both post with
-         the form as review_md and review_md_en. */
+      /* Bilingual: one textarea per site language. Every textarea posts with
+         the form as review_md (first language) or review_md_LANG (others). */
       (function(){
-        var initial = {
-          zh: ${JSON.stringify(String(t.review_md || ''))},
-          en: ${JSON.stringify(String(t.review_md_en || ''))}
-        };
+        /* Everything below is driven by LANGS: the editors, the preview panes
+           and the form-card excerpts are all keyed by language code, so adding
+           a locale needs no change in this script. */
+        var LANGS = ${JSON.stringify(LANGS.map((l) => ({ code: l.code, label: l.label })))};
+        var CODES = LANGS.map(function(l){ return l.code; });
+        var LABEL = {};
+        LANGS.forEach(function(l){ LABEL[l.code] = l.label; });
+
+        /* Initial values, one per language. The first language uses the bare
+           review_md column; the rest use review_md_<code>. */
+        var initial = {};
+        ${LANGS.map((l, i) => `initial[${JSON.stringify(l.code)}] = ${JSON.stringify(
+          String(i === 0 ? (t.review_md || '') : (t[`review_md_${l.code}`] || ''))
+        )};`).join('\n        ')}
+
         var modal = document.getElementById('mdModal');
         var live = document.getElementById('mdLive');
         var count = document.getElementById('mdCount');
@@ -801,22 +813,22 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
         var activeLangEl = document.getElementById('mdActiveLang');
         if (!modal || !live) return;
 
-        var LANG_LABEL = { zh: '中文', en: 'English' };
         var PREVIEW_LINES = 10;
-        var lang = 'zh';
+        var lang = CODES[0];
 
-        var editors = {
-          zh: document.getElementById('mdEditorZh'),
-          en: document.getElementById('mdEditorEn')
-        };
-        var primes = {
-          zh: document.getElementById('mdPreviewZh'),
-          en: document.getElementById('mdPreviewEn')
-        };
-        var statuses = {
-          zh: document.querySelector('[data-md-status="zh"]'),
-          en: document.querySelector('[data-md-status="en"]')
-        };
+        /* Editors: mdEditor_<code> */
+        var editors = {};
+        CODES.forEach(function(code){
+          editors[code] = document.getElementById('mdEditor_' + code);
+        });
+        /* Excerpt panes and status chips on the form card: mdPreview<Code> */
+        var primes = {};
+        var statuses = {};
+        CODES.forEach(function(code){
+          var cap = code.charAt(0).toUpperCase() + code.slice(1);
+          primes[code] = document.getElementById('mdPreview' + cap);
+          statuses[code] = document.querySelector('[data-md-status="' + code + '"]');
+        });
         var tabs = document.querySelectorAll('[data-md-lang]');
 
         function currentEditor() { return editors[lang]; }
@@ -824,7 +836,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
         /* Source excerpt shown on the form: first 10 lines of each language. */
         function renderCardPreview() {
           var missing = [];
-          ['zh', 'en'].forEach(function(code){
+          CODES.forEach(function(code){
             var text = initial[code] || '';
             var el = primes[code];
             var st = statuses[code];
@@ -832,7 +844,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
             if (!text.trim()) {
               if (el) { el.textContent = '（尚未填写）'; el.classList.add('is-empty'); }
               if (st) st.textContent = '未填写';
-              missing.push(LANG_LABEL[code]);
+              missing.push(LABEL[code]);
               return;
             }
             if (el) {
@@ -842,8 +854,10 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
             if (st) st.textContent = '共 ' + lines.length + ' 行 / ' + text.trim().length + ' 字';
           });
 
-          var zhLines = (initial.zh || '').split('\\n').length;
-          var rest = zhLines - PREVIEW_LINES;
+          // "More lines" applies to the first language, which is the one the
+          // form card previews in full.
+          var primary = CODES[0];
+          var rest = (initial[primary] || '').split('\\n').length - PREVIEW_LINES;
           if (more) {
             if (missing.length) {
               // Warning takes priority: an untranslated review is the useful signal.
@@ -851,7 +865,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
               more.textContent = missing.join(' / ') + ' 尚未填写，对应语言的详情页不会展示评测正文。';
             } else if (rest > 0) {
               more.hidden = false;
-              more.textContent = '… 中文还有 ' + rest + ' 行，在编辑器中查看完整内容';
+              more.textContent = '… ' + LABEL[primary] + '还有 ' + rest + ' 行，在编辑器中查看完整内容';
             } else {
               more.hidden = true;
             }
@@ -907,7 +921,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
 
         function switchLang(code) {
           lang = code;
-          ['zh', 'en'].forEach(function(c){
+          CODES.forEach(function(c){
             if (editors[c]) editors[c].hidden = c !== code;
           });
           tabs.forEach(function(b){
@@ -915,26 +929,24 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
             b.classList.toggle('is-active', on);
             b.setAttribute('aria-selected', on ? 'true' : 'false');
           });
-          if (activeLangEl) activeLangEl.textContent = '正在编辑：' + LANG_LABEL[code];
+          if (activeLangEl) activeLangEl.textContent = '正在编辑：' + LABEL[code];
           updateCount();
           renderLive();
           if (editors[code]) editors[code].focus();
         }
 
         function open() {
-          editors.zh.value = initial.zh;
-          editors.en.value = initial.en;
+          CODES.forEach(function(c){ if (editors[c]) editors[c].value = initial[c] || ''; });
           modal.hidden = false;
           document.body.classList.add('md-editing');
           switchLang(lang);
           var ed = currentEditor();
-          ed.setSelectionRange(ed.value.length, ed.value.length);
+          if (ed) ed.setSelectionRange(ed.value.length, ed.value.length);
         }
 
         function close(apply) {
           if (apply) {
-            initial.zh = editors.zh.value;
-            initial.en = editors.en.value;
+            CODES.forEach(function(c){ if (editors[c]) initial[c] = editors[c].value; });
             renderCardPreview();
           }
           modal.hidden = true;
@@ -981,7 +993,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
         tabs.forEach(function(b){
           b.addEventListener('click', function(){ switchLang(b.getAttribute('data-md-lang')); });
         });
-        ['zh', 'en'].forEach(function(c){
+        CODES.forEach(function(c){
           var ed = editors[c];
           if (!ed) return;
           ed.addEventListener('input', function(){ if (c === lang) { updateCount(); renderLive(); } });

@@ -632,14 +632,11 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
   const tags = tool.tags.map((tag) => `<span class="tool-tag">${esc(tag)}</span>`).join('');
   // Plain-text tag list for the info-card row ("A · B · C").
   const tagsText = tool.tags.join(' · ');
-  // Long-form editorial review. Each language has its own column; when a
-  // translation is missing we fall back to the other language rather than
-  // showing an empty section.
-  const isEn = normalizeLang(lang) === 'en';
-  const reviewPrimary = isEn ? tool.review_md_en : tool.review_md;
-  const reviewFallback = isEn ? tool.review_md : tool.review_md_en;
-  const reviewSource = String(reviewPrimary || '').trim() ? reviewPrimary : reviewFallback;
-  const reviewHtml = renderMarkdown(reviewSource || '');
+  // Long-form editorial review.
+  // `localizeTool` has already resolved review_md to this locale, falling back
+  // to the default language when the translation is blank — so the template
+  // stays language-agnostic.
+  const reviewHtml = renderMarkdown(tool.review_md || '');
 
   const body = `${head({
     title: `${tool.name} — ${pricingLabel(lang, tool.pricing)} | SoMarkIt`,

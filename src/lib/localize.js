@@ -12,7 +12,7 @@
 // (ChatGPT, Claude, Cursor), so an empty `name_en` simply reuses `name`.
 // -----------------------------------------------------------------------------
 
-import { normalizeLang } from './i18n.js';
+import { normalizeLang, DEFAULT_LANG } from './i18n.js';
 
 /** First non-empty, trimmed candidate. */
 function pick(...candidates) {
@@ -26,28 +26,37 @@ function pick(...candidates) {
 
 /**
  * Localise one tool for a language.
+ *
+ * Language-neutral: for any locale other than the default it reads the
+ * `<field>_<code>` column and falls back to the default-language value when the
+ * translation is blank. Adding a locale needs a column of that shape; this
+ * function picks it up without further changes.
+ *
  * Returns a shallow copy with `name`, `description`, `tags` (array) and
  * `review_md` resolved to the requested language.
  */
 export function localizeTool(tool, lang) {
   if (!tool) return tool;
-  const en = normalizeLang(lang) === 'en';
+  const code = normalizeLang(lang);
+  const translated = code !== DEFAULT_LANG;
+  // `<field>_<code>` holds the translation; the bare column is the original.
+  const forLang = (field) => (translated ? pick(tool[`${field}_${code}`], tool[field]) : pick(tool[field]));
   // `tags` is stored as a comma separated string; expose both forms.
-  const rawTags = en ? pick(tool.tags_en, tool.tags) : pick(tool.tags);
+  const rawTags = forLang('tags');
   return {
     ...tool,
-    name: en ? pick(tool.name_en, tool.name) : pick(tool.name),
-    description: en ? pick(tool.description_en, tool.description) : pick(tool.description),
+    name: forLang('name'),
+    description: forLang('description'),
     tags: rawTags
       ? String(rawTags).split(',').map((s) => s.trim()).filter(Boolean)
       : [],
-    review_md: en ? pick(tool.review_md_en, tool.review_md) : pick(tool.review_md),
+    review_md: forLang('review_md'),
     // Which fields actually came from a translation, for admin hints.
     isTranslated: {
-      name: Boolean(en && pick(tool.name_en)),
-      description: Boolean(en && pick(tool.description_en)),
-      tags: Boolean(en && pick(tool.tags_en)),
-      review: Boolean(en && pick(tool.review_md_en)),
+      name: Boolean(translated && pick(tool[`name_${code}`])),
+      description: Boolean(translated && pick(tool[`description_${code}`])),
+      tags: Boolean(translated && pick(tool[`tags_${code}`])),
+      review: Boolean(translated && pick(tool[`review_md_${code}`])),
     },
   };
 }

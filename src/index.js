@@ -312,14 +312,16 @@ async function router(request, env, ctx) {
   }
 
   // ----------------------------------------------------------------- SEO ---
-  if (pubPath === '/sitemap.xml' && loc.matched) {
+  // Site-level files, not pages: served at the origin root and also accepted
+  // under a locale prefix. They must never depend on the locale.
+  if (pubPath === '/sitemap.xml') {
     const [categories, tools] = await Promise.all([
       loadCategories(env.DB, lang),
       loadPublished(env.DB, lang),
     ]);
     return sitemap(categories, tools);
   }
-  if (pubPath === '/robots.txt' && loc.matched) {
+  if (pubPath === '/robots.txt') {
     return new Response(
       `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api\n\nSitemap: https://somarkit.com/sitemap.xml\n`,
       { headers: { 'content-type': 'text/plain; charset=utf-8' } }
