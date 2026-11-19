@@ -105,9 +105,13 @@ async function router(request, env, ctx) {
   const L = (p) => localePath(lang, p);
 
   /**
-   * Attach an explicit cache policy. Without a Cache-Control header browsers
-   * apply *heuristic* caching and may keep serving a stale page long after a
-   * deploy — so every public HTML response must state its policy explicitly.
+   * Finalise a public HTML response.
+   *
+   * Also handles the "no locale prefix" case: such a request renders the
+   * default language, but it is not the canonical address. Instead of
+   * rewriting HTML after the fact, the templates are told via `unprefixed`
+   * (see the page builders) so they emit the /zh canonical and a noindex tag.
+   * This keeps bare links working without letting two URLs compete in search.
    */
   const withLang = (res) => {
     if (!res.headers.has('Cache-Control')) {
@@ -117,6 +121,10 @@ async function router(request, env, ctx) {
     }
     return res;
   };
+
+  // Passed into every page builder: true when the request omitted the locale
+  // prefix, which makes the page a non-canonical alias of the /zh URL.
+  const pageFlags = { unprefixed: !loc.matched };
 
   // ---------------------------------------------------------------- API ---
   if (path === '/api/track' && method === 'POST') {
@@ -237,15 +245,14 @@ async function router(request, env, ctx) {
   // Everything below is a public page and must carry a locale prefix. A
   // request without one is a 404 by design: giving every page exactly one
   // address avoids duplicate content and keeps hreflang honest.
-  if (!loc.matched) {
-    return new Response('Not Found', {
-      status: 404,
-      headers: { 'content-type': 'text/plain; charset=utf-8' },
-    });
-  }
+  // A path without a locale prefix still renders, in the default language, so
+  // existing bookmarks and bare "/tools/x" links keep working. It is not a
+  // canonical address though: canonical points at the /zh version and the page
+  // is marked noindex (see head()), so the two addresses never compete.
+  const unprefixed = !loc.matched;
 
   if (pubPath === '/' || pubPath === '/index.html') {
-    return withLang(await renderHome(request, env, theme, lang, gaId, pubPath));
+    return withLang(await renderHome(request, env, theme, lang, gaId, pubPath, pageFlags.unprefixed));
   }
   if (pubPath === '/about') {
     const [categories, counts, tools] = await Promise.all([
@@ -253,7 +260,8 @@ async function router(request, env, ctx) {
       countToolsByCategory(env.DB),
       loadPublished(env.DB, lang),
     ]);
-    return withLang(aboutPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath }));
+    return withLang(aboutPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath,
+        ...pageFlags, }));
   }
 
   // ------------------------------------------------------ submit a tool ---
@@ -264,10 +272,11 @@ async function router(request, env, ctx) {
         countToolsByCategory(env.DB),
         loadPublished(env.DB, lang),
       ]);
-      return withLang(submitPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath }));
+      return withLang(submitPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath,
+        ...pageFlags, }));
     }
     if (method === 'POST') {
-      return withLang(await handleSubmit(request, env, theme, lang, gaId, pubPath));
+      return withLang(await handleSubmit(request, env, theme, lang, gaId, pubPath, pageFlags.unprefixed));
     }
   }
   if (pubPath === '/submit/thanks') {
@@ -276,7 +285,8 @@ async function router(request, env, ctx) {
       countToolsByCategory(env.DB),
       loadPublished(env.DB, lang),
     ]);
-    return withLang(submitSuccessPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath }));
+    return withLang(submitSuccessPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath,
+        ...pageFlags, }));
   }
 
   if (pubPath.startsWith('/tools/')) {
@@ -296,6 +306,7 @@ async function router(request, env, ctx) {
       return withLang(toolPage({
         tool, categories, counts, related: fallback,
         total: allTools.length, theme, lang, gaId, basePath: pubPath,
+        ...pageFlags,
       }));
     }
   }
@@ -363,12 +374,13 @@ async function router(request, env, ctx) {
     countToolsByCategory(env.DB),
     loadPublished(env.DB, lang),
   ]);
-  return withLang(notFoundPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath }));
+  return withLang(notFoundPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath,
+        ...pageFlags, }));
 }
 
 // --- public render ----------------------------------------------------------
 
-async function renderHome(request, env, theme, lang = 'zh', gaId = '', basePath = '/') {
+async function renderHome(request, env, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false) {
   const [categories, counts, tools, featured] = await Promise.all([
     loadCategories(env.DB, lang),
     countToolsByCategory(env.DB),
@@ -380,7 +392,7 @@ async function renderHome(request, env, theme, lang = 'zh', gaId = '', basePath 
     categories, counts, tools, featured,
     total: tools.length,
     catCount: categories.length,
-    theme, lang, gaId, basePath,
+    theme, lang, gaId, basePath, unprefixed,
   });
   // Cache policy is set centrally in withLang(); only the edge TTL is widened
   // here because the home listing is the hottest page.
@@ -425,7 +437,7 @@ ${LANGS.map((x) => `    <xhtml:link rel="alternate" hreflang="${x.code}" href="$
 
 // --- public: submit a tool --------------------------------------------------
 
-async function handleSubmit(request, env, theme, lang, gaId, basePath = '/') {
+async function handleSubmit(request, env, theme, lang, gaId, basePath = '/', unprefixed = false) {
   let form;
   try {
     form = await request.formData();
@@ -453,7 +465,7 @@ async function handleSubmit(request, env, theme, lang, gaId, basePath = '/') {
       loadPublished(env.DB, lang),
     ]);
     return submitPage({
-      categories, counts, total: tools.length, theme, lang, gaId, basePath,
+      categories, counts, total: tools.length, theme, lang, gaId, basePath, unprefixed,
       error: msg, values,
     });
   };

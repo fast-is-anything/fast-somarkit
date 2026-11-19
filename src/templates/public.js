@@ -485,8 +485,8 @@ function footer(year, lang = 'zh', basePath = '/') {
   </footer>`;
 }
 
-function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = 'zh', gaId = '', basePath = '/', mode = 'subset', initialVisibleCount = null }) {
-  return `${head({ title, description, canonical, jsonLd, theme, lang, gaId })}
+function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false, mode = 'subset', initialVisibleCount = null }) {
+  return `${head({ title, description, canonical, jsonLd, theme, lang, gaId, noindex: unprefixed })}
 <body>
 <noscript><div style="text-align:center;padding:1rem;background:#FEF2F2;color:#991B1B">本站需要启用 JavaScript 才能使用搜索与筛选功能。</div></noscript>
 <a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
@@ -545,7 +545,7 @@ function groupByCategory(categories, tools, perGroup = 0) {
 
 // --- pages ------------------------------------------------------------------
 
-export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = 'zh', gaId = '', basePath = '/' }) {
+export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
   // Each rail shows the first RAIL_PAGE_SIZE tools; the rest stream in on
   // scroll via /api/rail, and "View all" jumps to the full category page.
   const groups = groupByCategory(categories, tools, RAIL_PAGE_SIZE);
@@ -594,7 +594,7 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
       canonical: `https://somarkit.com${localePath(lang, '/')}` ,
       jsonLd,
       categories, counts, groups, total, featured,
-      activeSlug: 'all', theme, lang, gaId, basePath,
+      activeSlug: 'all', theme, lang, gaId, basePath, unprefixed,
       // The home page renders the whole catalogue, so the rail can filter
       // client-side. Category pages only hold a subset and must navigate.
       mode: 'all',
@@ -603,7 +603,7 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
   );
 }
 
-export function toolPage({ tool, categories, counts, related, total, theme, lang = 'zh', gaId = '', basePath = '/' }) {
+export function toolPage({ tool, categories, counts, related, total, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
   const siteDesc = t(lang, 'seo.siteDesc');
   const catName = tool.category_name || t(lang, 'detail.uncategorized');
   const jsonLd = [
@@ -650,7 +650,8 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
     lang,
     gaId,
     // Per-tool switch: keeps the page out of the index but still follows links.
-    noindex: tool.noindex === 1,
+    // A locale-less request is a non-canonical alias: never index it.
+    noindex: tool.noindex === 1 || unprefixed,
   })}
 <body>
 <a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
@@ -726,7 +727,7 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = 'zh', gaId = '', basePath = '/' }) {
+export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
   // Ship every category (not just this one) so switching to another category
   // can be handled client-side, exactly like on the home page.
   const groups = groupByCategory(categories, allTools || tools);
@@ -748,7 +749,7 @@ export function categoryPage({ category, categories, counts, tools, allTools, fe
       canonical: `https://somarkit.com${localePath(lang, `/${category.slug}`)}`,
       jsonLd,
       categories, counts, groups, total, featured,
-      activeSlug: category.slug, theme, lang, gaId, basePath,
+      activeSlug: category.slug, theme, lang, gaId, basePath, unprefixed,
       // Full catalogue present → client-side switching, same as home.
       mode: 'all',
       initialVisibleCount: tools.length,
@@ -757,7 +758,7 @@ export function categoryPage({ category, categories, counts, tools, allTools, fe
   );
 }
 
-export function aboutPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/' }) {
+export function aboutPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
   const isEn = normalizeLang(lang) === 'en';
   const body = `${head({
     title: isEn ? 'About SoMarkIt — AI Tool Directory' : '关于 SoMarkIt — AI 工具导航',
@@ -811,7 +812,7 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function notFoundPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/' }) {
+export function notFoundPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
   const isEn = normalizeLang(lang) === 'en';
   return new Response(
     `${head({ title: isEn ? 'Page not found | SoMarkIt' : '页面不存在 | SoMarkIt', description: t(lang, 'seo.siteDesc'), theme, lang, gaId })}
@@ -954,7 +955,7 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function submitSuccessPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/' }) {
+export function submitSuccessPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
   const body = `${head({
     title: `${t(lang, 'submit.successTitle')} — SoMarkIt`,
     description: t(lang, 'submit.successBody'),
