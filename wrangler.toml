@@ -35,7 +35,11 @@ SITE_NAME = "SoMarkIt"
 SITE_URL = "https://somarkit.com"
 # Comma separated list of Google accounts allowed into /admin
 ADMIN_EMAILS = "eastlion123456@gmail.com,dongdochong@gmail.com"
+# GA4 measurement id (G-XXXXXXXXXX). Leave empty to disable the GA tag entirely
+# (the site then only records clicks in D1). Can also be set as a secret.
+GA_MEASUREMENT_ID = "G-EMJ9M5XNX2"
 # Google OAuth client id / secret are provided as secrets:
 #   wrangler secret put GOOGLE_CLIENT_ID
 #   wrangler secret put GOOGLE_CLIENT_SECRET
 #   wrangler secret put SESSION_SECRET
+#   wrangler secret put GA_API_SECRET   (optional, GA4 Measurement Protocol)

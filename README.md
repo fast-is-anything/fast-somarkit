@@ -30,12 +30,14 @@
 | Google 登录 | OAuth 2.0 授权码 + PKCE，邮箱白名单 + 管理员表双重校验 |
 | 侧边栏折叠 | 按钮或 `Ctrl/Cmd + B` 折叠为图标栏，状态持久化 |
 | 仪表盘 | 收录数 / 分类数 / 累计访问 / 管理员数，最近更新、访问排行、操作日志 |
-| 工具管理 | 列表 + 关键词/分类/状态筛选 + 分页 + 新增/编辑/删除 |
+| 访问统计 | 点击趋势、独立访客、国家/地区、来源页面、热门工具 Top12、零访问工具 |
+| 工具管理 | 列表 + 关键词/分类/状态/排序筛选 + 分页 + 新增/编辑/删除 |
 | 分类管理 | 增删改、图标选择、排序、显隐 |
 | 批量导入 | CSV 上传或粘贴，按 `url` 或 `name` 去重（存在则更新） |
 | 操作日志 | 记录谁在何时做了什么，可清空 |
 | 管理员 | 查看白名单、启用/停用/删除管理员 |
-| 访问统计 | 前台点击「访问」按钮通过 `sendBeacon` 上报，驱动热门排序 |
+
+> **访问统计是双写的**：每次点击同时写入 D1（实时、可查询）和 GA4（`select_tool` 事件），图表把两边的数据画在同一坐标系里方便对比。
 
 ---
 
@@ -46,7 +48,26 @@
 - **静态资源**：Cloudflare Workers Static Assets（`public/`）
 - **前端**：服务端渲染 HTML + 原生 JS 渐进增强，**零框架、零构建**
 - **样式**：手写 CSS 设计系统（CSS 变量 + `[data-theme="dark"]`）
-- **鉴权**：WebCrypto HMAC-SHA256 签名 Cookie（无第三方库）
+- **图表**：ECharts（后台统计页，自托管）
+- **鉴权**：WebCrypto HMAC-SHA256 签名 Cookie / RS256 JWT（无第三方库）
+
+### 第三方静态资源
+
+| 文件 | 版本 | 来源 | 用途 |
+|---|---|---|---|
+| `public/assets/echarts.min.js` | **5.5.1** | `https://fastly.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js` | 后台「访问统计」页的图表渲染 |
+
+> - **自托管原因**：避免国内访问 `cdn.jsdelivr.net` / `unpkg` 不稳定导致图表空白。
+> - **不影响 Worker 体积**：静态文件走 Assets 通道，不会打进 Worker 脚本包（实测 Worker 脚本 gzip 后约 56 KB）。
+> - **升级方式**：
+>   ```bash
+>   # 1. 下载新版本（替换 5.5.2 为实际版本号）
+>   curl -o public/assets/echarts.min.js \
+>     https://fastly.jsdelivr.net/npm/echarts@5.5.2/dist/echarts.min.js
+>   # 2. 验证：启动本地服务后访问 /admin/analytics，确认图表正常
+>   # 3. 更新上表中的版本号
+>   ```
+> - ECharts 采用 Apache-2.0 许可证，版权归 Apache Software Foundation。
 
 ```
 ├── src/
@@ -54,12 +75,15 @@
 │   ├── lib/
 │   │   ├── auth.js           # Google OAuth + 会话 + 登录页兜底
 │   │   ├── crypto.js         # HMAC 签名 / Cookie / 转义
-│   │   ├── db.js             # D1 数据访问层
+│   │   ├── db.js             # D1 数据访问层 + 点击统计聚合
+│   │   ├── ga.js             # GA4 Measurement Protocol 服务端镜像（双写）
+│   │   ├── ga-report.js      # GA4 Data API 客户端（JWT + 缓存）
 │   │   └── icons.js          # 内联 SVG 图标库
 │   └── templates/
 │       ├── public.js         # 前台页面
-│       └── admin.js          # 后台页面
-├── public/                   # 静态资源（CSS / JS / 图标）
+│       ├── admin.js          # 后台页面
+│       └── analytics.js      # 访问统计页（ECharts option 生成）
+├── public/                   # 静态资源（CSS / JS / 图标 / echarts）
 ├── db/
 │   ├── schema.sql            # 表结构
 │   └── seed.sql              # 13 分类 × 119 工具种子数据
@@ -116,6 +140,46 @@ npx wrangler secret put SESSION_SECRET        # 任意 32+ 位随机字符串
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
+
+### 5.1 配置 Google Analytics（可选）
+
+访问统计支持 **D1 + GA4 双写**：点击事件同时写入自有数据库和 GA4，后台图表把两份数据画在一起对比。
+
+**仅接入前端 gtag**（能看 PV/UV，但后台图表拿不到 GA 数据）：
+
+```toml
+# wrangler.toml
+[vars]
+GA_MEASUREMENT_ID = "G-XXXXXXXXXX"
+```
+
+**完整接入**（后台图表显示 GA 曲线）还需 3 步：
+
+1. **启用 Google Analytics Data API**
+   ```
+   https://console.developers.google.com/apis/api/analyticsdata.googleapis.com/overview
+   ```
+
+2. **创建服务账号并授权**
+   - Google Cloud Console → IAM 与管理 → 服务账号 → 创建 → 密钥 → **JSON**
+   - GA4 → 管理 → 媒体资源访问管理 → 添加该服务账号邮箱，角色 **查看者**
+
+3. **写入 Worker 密钥**
+   ```bash
+   npx wrangler secret put GA_PROPERTY_ID      # 纯数字的属性 ID（非数据流 ID）
+   npx wrangler secret put GA_SERVICE_ACCOUNT  # 整个 JSON 文件内容，单行
+   ```
+
+> ⚠️ **三个 ID 容易混淆**：
+> | 名称 | 示例 | 用途 |
+> |---|---|---|
+> | 衡量 ID | `G-EMJ9M5XNX2` | 前端 gtag 注入 |
+> | 数据流 ID | `16374545430` | GA 后台标识，**这里用不到** |
+> | **属性 ID** | `565150853` | Data API 查询（填这个） |
+
+> - 未配置 `GA_PROPERTY_ID` / `GA_SERVICE_ACCOUNT` 时，统计页只显示 D1 数据并提示"未配置"，不会报错。
+> - GA 数据有 **1–2 天延迟**，所以曲线末尾会偏低，属正常现象。
+> - GA Data API 结果在 Worker 内缓存 10 分钟，避免触发每日配额。
 
 ### 6. 设置管理员白名单
 
@@ -179,9 +243,17 @@ npm run dev        # http://localhost:8799
 DEV_LOGIN_EMAIL=dev@local.test
 SESSION_SECRET=local-dev-session-secret-do-not-use-in-prod
 ADMIN_EMAILS=dev@local.test
+
+# 可选：访问统计
+GA_MEASUREMENT_ID=G-XXXXXXXXXX
+GA_PROPERTY_ID=565150853
+GA_SERVICE_ACCOUNT={"type":"service_account","project_id":"...", ...}
 ```
 
-> `DEV_LOGIN_EMAIL` **绝不能出现在生产环境**，该路由在生产不存在（未设置该变量即返回 404）。
+> - `DEV_LOGIN_EMAIL` **绝不能出现在生产环境**，该路由在生产不存在（未设置该变量即返回 404）。
+> - `GA_SERVICE_ACCOUNT` 必须是**单行 JSON**（`wrangler dev` 不支持多行环境变量）。可用
+>   `jq -c . key.json` 或 `node -e "console.log(JSON.stringify(require('./key.json')))"` 压成一行。
+> - 修改 `.dev.vars` 后需要**重启 `wrangler dev`** 才会生效。
 
 ---
 
@@ -234,9 +306,11 @@ npx wrangler d1 export somarkit --remote --output=backup.sql
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `GET` | `/api/search?q=` | 公开搜索接口，返回 JSON |
-| `POST` | `/api/track` | 上报工具点击（`{"id": 12}`） |
+| `POST` | `/api/track` | 上报工具点击。Body: `{"id": 12, "visitor": "abc123", "path": "/"}`。已发布校验 + 同 IP 60 秒去重 |
 | `GET` | `/sitemap.xml` | 自动生成的站点地图 |
 | `GET` | `/robots.txt` | 爬虫规则（屏蔽 `/admin`、`/api`） |
+
+`/api/track` 的响应：`{"ok": true, "visitor": "..."}`，前端把 `visitor` 存进 `localStorage`，用于统计独立访客。
 
 ---
 
@@ -260,9 +334,22 @@ npx wrangler d1 export somarkit --remote --output=backup.sql
 | 表 | 用途 |
 |---|---|
 | `categories` | 分类（slug / 名称 / 图标 / 排序 / 显隐） |
-| `tools` | 工具（slug / 名称 / URL / 简介 / 分类 / 标签 / 定价 / 角标 / 状态 / 访问数） |
+| `tools` | 工具（slug / 名称 / URL / 简介 / 分类 / 标签 / 定价 / 角标 / 状态 / `visit_count` 缓存） |
 | `admins` | 管理员（email / 角色 / 启用状态 / 最近登录） |
 | `audit_log` | 操作日志 |
-| `settings` | 预留键值配置 |
+| `submissions` | 访客提交的工具推荐（审核后转正） |
+| `click_events` | **点击明细（访问统计的数据源）** |
 
 `tools.status`：`published`（前台可见）/ `draft`（草稿，前台不可见）/ `archived`（归档，前台不可见）。
+
+### 关于 `click_events` 与 `tools.visit_count`
+
+- `click_events` 是**唯一事实来源**：每次点击一行，记录 `tool_id` / `ip_hash`（加盐哈希，不存原始 IP）/ `visitor` / `country` / `referer` / `path` / `created_at`。
+- `tools.visit_count` 只是**缓存**，与明细在同一批 `batch` 中更新，用于前台热榜排序，避免每次都做聚合。
+- 二者若因手工改库而不一致，可用下面的 SQL 重建：
+
+```sql
+UPDATE tools SET visit_count = (
+  SELECT COUNT(*) FROM click_events e WHERE e.tool_id = tools.id
+);
+```

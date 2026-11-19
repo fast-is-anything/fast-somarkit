@@ -451,14 +451,55 @@
   });
 
   /* -------------------------------------------------------- visit tracking */
+  /*
+   * Every click on a tool's "访问" button is sent to /api/track, which records
+   * it in D1 and mirrors the same event to GA4. The visitor id is a random
+   * value persisted in localStorage so the server can count distinct visitors
+   * without storing the raw IP (it only ever sees a salted hash).
+   */
+  var VISITOR_KEY = 'somarkit-visitor';
+
+  function getVisitorId() {
+    try {
+      var v = localStorage.getItem(VISITOR_KEY);
+      if (v && /^[A-Za-z0-9_-]{8,64}$/.test(v)) return v;
+      // crypto.randomUUID is available in every browser that supports
+      // sendBeacon; fall back to a timestamp+random mix otherwise.
+      var id;
+      if (window.crypto && window.crypto.randomUUID) {
+        id = window.crypto.randomUUID().replace(/-/g, '');
+      } else {
+        id = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+      }
+      localStorage.setItem(VISITOR_KEY, id);
+      return id;
+    } catch (e) {
+      return '';
+    }
+  }
+
   document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('.tool-visit-btn[data-tool-id]');
     if (!a) return;
-    var id = a.getAttribute('data-tool-id');
+    var id = Number(a.getAttribute('data-tool-id'));
+    if (!(id > 0)) return;
+
+    var payload = JSON.stringify({
+      id: id,
+      visitor: getVisitorId(),
+      path: location.pathname + location.search,
+    });
+
     try {
-      var body = JSON.stringify({ id: Number(id) });
       if (navigator.sendBeacon) {
-        navigator.sendBeacon('/api/track', new Blob([body], { type: 'application/json' }));
+        navigator.sendBeacon('/api/track', new Blob([payload], { type: 'application/json' }));
+      } else {
+        fetch('/api/track', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: payload,
+          keepalive: true,
+        });
       }
     } catch (err) {}
   });

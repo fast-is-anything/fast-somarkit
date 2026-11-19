@@ -235,6 +235,9 @@ button { font-family: inherit; }
   margin-left: var(--ad-sidebar-w);
   transition: margin-left .22s cubic-bezier(.4, 0, .2, 1);
   display: flex; flex-direction: column;
+  /* Natural document flow: the page scrolls normally and tall content is
+     never clipped. (An earlier `height: 100vh; overflow: hidden` here locked
+     the column to one screen and broke long pages on mobile — gone.) */
   min-height: 100vh;
 }
 
@@ -268,7 +271,19 @@ button { font-family: inherit; }
 }
 .ad-icon-btn:hover { background: var(--ad-surface-2); color: var(--ad-text); }
 
-.ad-content { padding: 24px; flex: 1; max-width: 1320px; width: 100%; }
+/* Content fills whatever width the viewport gives it. A hard max-width used to
+   cap this column at 1320px, which left a large dead band on 2K/4K screens —
+   the admin console is a data tool, so it should use all the space it has. */
+.ad-content {
+  padding: 24px; flex: 1; width: 100%;
+  /* No max-width: the shell already constrains the column to the viewport, so
+     the content always reaches the right edge on any screen size. */
+  max-width: none;
+  /* A flex column so a list page can fill the height left over after any
+     banners above the card, instead of overflowing the viewport. */
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
 
 /* ---------------------------------------------------------------- pieces */
 .ad-card {
@@ -283,8 +298,64 @@ button { font-family: inherit; }
   border-bottom: 1px solid var(--ad-border-soft);
   flex-wrap: wrap;
 }
+/* Cards that hold a data table keep a constant header height, so the table
+   starts at the same y on every list page regardless of whether the header
+   holds a title, tabs or a filter toolbar. */
+.ad-card:has([data-fixed-table]) > .ad-card-head {
+  min-height: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+/* A list card fills whatever vertical space is left in the content column,
+   whatever banners sit above it. The table area then takes the remainder
+   between the card header and the pager, so the page itself never scrolls —
+   with 0 rows or 100, with or without an info banner. */
+.ad-card:has([data-fixed-table]) {
+  flex: 1 1 auto;
+  display: flex; flex-direction: column;
+  min-height: 0;
+  margin-bottom: 0;
+}
+/* Content pages (analytics, forms, details) are tall and must never be
+   squeezed by the flex column: cards keep their natural height and the
+   document scrolls normally. Only a list page collapses into a fixed-height
+   layout (see the :has([data-fixed-table]) rule above). */
+.ad-content > .ad-card:not(:has([data-fixed-table])),
+.ad-content > .ad-alert,
+.ad-content > .ad-toolbar,
+.ad-content > .ad-stats,
+.ad-content > .an-grid-2,
+.ad-content > .an-grid-3,
+.ad-content > .an-grid-2 > .ad-card,
+.ad-content > .an-grid-3 > .ad-card {
+  flex: 0 0 auto;
+}
+/* Grid wrappers must not collapse their children. The 2-column charts grid
+   keeps natural heights; the 3-card comparison row stretches so all three
+   cards share the tallest height (an empty card must not look shorter). */
+.an-grid-2 { align-items: start; }
+.an-grid-3 { align-items: stretch; }
+
+/* Banners above the list shrink the table (see JS fitTable) so the page still
+   fits the viewport where possible. */
+.ad-content:has(> .ad-alert) > .ad-card:has([data-fixed-table]) { margin-top: 0; }
+/* A banner above the list shrinks the table by exactly its own height, so the
+   table + pager still end at the bottom of the viewport. */
+.ad-content > .ad-alert + .ad-card { margin-bottom: 0; }
 .ad-card-head h2 { margin: 0; font-size: 14px; font-weight: 650; }
 .ad-card-head .spacer { flex: 1; }
+/* Inline note pinned in a list card header (e.g. the ADMIN_EMAILS whitelist):
+   keeps informational content out of the page body so the table keeps the
+   height it has on every other list page. */
+.ad-head-note {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  min-width: 0; font-size: 12px; color: var(--ad-text-3);
+  max-height: 40px; overflow: hidden;
+}
+.ad-head-note-label { font-weight: 600; white-space: nowrap; }
+.ad-head-note .ad-pill { font-size: 11px; }
 .ad-card-body { padding: 18px; }
 
 .ad-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
@@ -357,7 +428,11 @@ button { font-family: inherit; }
 .ad-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table.ad-table {
   width: 100%;
-  border-collapse: collapse;
+  /* `separate` (not collapse) so header cells can be sticky: with
+     border-collapse each cell's borders belong to the table and are painted
+     at the table's position, which breaks position: sticky in Chrome. */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
   /* Let the browser size columns to content first; the first column then
      absorbs whatever is left. This is what stops CJK cells from being
@@ -387,14 +462,68 @@ table.ad-table {
 .ad-table td.ad-cell-nowrap,
 .ad-table td.ad-cell-date { white-space: nowrap; }
 
-/* The first (name) column carries the flexible width and wraps normally. */
+/* The first (name) column carries the flexible width and wraps normally —
+   except when the first cell is a rank number, which must stay narrow. */
 .ad-table td:first-child { min-width: 180px; }
+.ad-table td.ad-cell-rank,
+.ad-table td:first-child.ad-cell-rank { min-width: 0; width: 40px; }
+/* Rank column: a fixed narrow gutter, right-aligned. */
+.ad-table td.ad-cell-rank,
+.ad-table th.ad-cell-rank { width: 40px; min-width: 40px; max-width: 40px; text-align: right; padding-right: 6px; padding-left: 0; }
+.ad-table td.ad-cell-rank { color: var(--ad-text-3); font-variant-numeric: tabular-nums; }
 .ad-cell-sub {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 320px;
 }
+/* Inside a fixed-height list the first column must be able to shrink, or the
+   table overflows its box and every row grows a line taller (60px → 104px) as
+   cell contents wrap. Truncate with an ellipsis instead. */
+.ad-table-wrap[data-fixed-table] .ad-table td:first-child { min-width: 140px; }
+.ad-table-wrap[data-fixed-table] .ad-cell-main,
+.ad-table-wrap[data-fixed-table] .ad-cell-sub {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Keep rows a single line: wrapping is what makes row height depend on
+   content. The full value stays available via the title tooltip. */
+.ad-table-wrap[data-fixed-table] .ad-table td { vertical-align: middle; }
+/* Fixed row height so the table looks identical whether it holds 1 row or 100:
+   every data row is exactly --ad-row-h tall, no matter what it contains. */
+.ad-table-wrap[data-fixed-table] .ad-table tbody tr:not(:has(.ad-empty)) { height: var(--ad-row-h, 52px); }
+.ad-table-wrap[data-fixed-table] .ad-table tbody td {
+  height: var(--ad-row-h, 52px);
+  padding-top: 0; padding-bottom: 0;
+}
+.ad-table-wrap[data-fixed-table] .ad-table td > div { min-height: 0; }
+
+/* `table-layout: fixed` for list tables: with `auto` the browser sizes columns
+   from the widest cell, so a long URL forces the table wider than its box and
+   every row wraps to 2–3 lines. Fixed layout keeps every row one line tall and
+   lets the text ellipsis do the truncating instead. */
+.ad-table-wrap[data-fixed-table] .ad-table { table-layout: fixed; width: 100%; }
+.ad-table-wrap[data-fixed-table] .ad-table th,
+.ad-table-wrap[data-fixed-table] .ad-table td {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* `table-layout: fixed` needs an explicit width for the first column. The
+   `:not(.ad-cell-rank)` guard keeps rank columns narrow — without it this
+   selector's specificity (0,3,3) beat the `.ad-cell-rank` rule and stretched
+   the "#" column to 30% of the table. */
+.ad-table-wrap[data-fixed-table] .ad-table td:first-child:not(.ad-cell-rank),
+.ad-table-wrap[data-fixed-table] .ad-table th:first-child:not(.ad-cell-rank) { width: 30%; min-width: 0; }
+/* Rank column wins regardless of position in the row. */
+.ad-table-wrap[data-fixed-table] .ad-table td.ad-cell-rank,
+.ad-table-wrap[data-fixed-table] .ad-table th.ad-cell-rank {
+  width: 44px; min-width: 44px; max-width: 44px; padding-left: 14px;
+  text-align: left;
+}
+/* Buttons and dates must never be clipped: give them content-sized columns
+   and let the flexible name column absorb the rest. */
+.ad-table-wrap[data-fixed-table] .ad-table td:last-child,
+.ad-table-wrap[data-fixed-table] .ad-table th:last-child { width: 120px; }
+.ad-table-wrap[data-fixed-table] .ad-table th.cell-date,
+.ad-table-wrap[data-fixed-table] .ad-table td.ad-cell-date { width: 96px; }
 
 .ad-cell-actions {
   display: flex; gap: 4px; justify-content: flex-end;
@@ -402,12 +531,89 @@ table.ad-table {
 }
 
 /* --------------------------------------------------------------------------
-   Responsive table → stacked cards.
-   Below 1100px the admin table becomes a card list: each row is a block whose
+   Fixed-height table.
+   Every list page reserves exactly the same vertical space, whether it holds
+   0 rows or 120, with or without an info banner: the table area is a fixed
+   viewport-relative height with a sticky header. Consequences:
+     • the card never "breathes" as data comes and goes,
+     • the pager always sits at the same place on screen,
+     • banners above the card are compensated by a slightly shorter table, so
+       they never push the page into a scroll.
+   -------------------------------------------------------------------------- */
+.ad-table-wrap[data-fixed-table] {
+  /* One height for every list table. `--ad-table-h` is adjusted by JS for the
+     exact chrome above it (banner, extra cards); the calc() is the fallback. */
+  height: var(--ad-table-h, calc(100vh - 260px));
+  min-height: 200px;
+  flex: 0 0 auto;
+  overflow: auto;
+  position: relative;
+}
+.ad-table-wrap[data-fixed-table] .ad-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  /* Sticky headers need an opaque fill or rows show through while scrolling. */
+  background: var(--ad-surface);
+}
+.ad-table-wrap[data-fixed-table] .ad-table thead th::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 1px; background: var(--ad-border);
+}
+/* Scrollbar styling so the inner scroll area reads as intentional. */
+.ad-table-wrap[data-fixed-table]::-webkit-scrollbar { width: 10px; height: 10px; }
+.ad-table-wrap[data-fixed-table]::-webkit-scrollbar-thumb {
+  background: var(--ad-border); border-radius: 6px;
+  border: 3px solid var(--ad-surface);
+}
+.ad-table-wrap[data-fixed-table]::-webkit-scrollbar-thumb:hover { background: var(--ad-text-3); }
+
+/* --------------------------------------------------------------------------
+   Pager: "showing a–b of n", first/prev/numbered/next/last, rows per page.
+   -------------------------------------------------------------------------- */
+.ad-pager {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 18px;
+  border-top: 1px solid var(--ad-border-soft);
+  background: var(--ad-surface);
+  border-radius: 0 0 var(--ad-radius) var(--ad-radius);
+}
+.ad-pager-info {
+  font-size: 12.5px; color: var(--ad-text-3);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.ad-pager-info strong { color: var(--ad-text-2); font-weight: 600; }
+.ad-pager-nav { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.ad-pager-btn,
+.ad-pager-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 30px; height: 30px; padding: 0 8px;
+  border: 1px solid var(--ad-border);
+  border-radius: 7px;
+  background: var(--ad-surface);
+  color: var(--ad-text-2);
+  font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.ad-pager-btn:hover,
+.ad-pager-num:hover { background: var(--ad-surface-2); color: var(--ad-text); }
+.ad-pager-num.cur {
+  background: var(--ad-primary); border-color: var(--ad-primary);
+  color: #fff; font-weight: 600; cursor: default;
+}
+.ad-pager-btn.is-disabled,
+.ad-pager-btn[aria-disabled="true"] {
+  opacity: .4; pointer-events: none; cursor: not-allowed;
+}
+.ad-pager-gap { padding: 0 2px; color: var(--ad-text-3); font-size: 12px; }
+.ad-pager-size { display: flex; align-items: center; }
+.ad-select-sm { height: 30px; padding: 0 8px; font-size: 12.5px; width: auto; min-width: 96px; }
+
+/* ------------------------------------------------------------------------- the admin table becomes a card list: each row is a block whose
    cells are laid out with their header label. This removes horizontal
    scrolling entirely and keeps CJK text on one readable line.
    -------------------------------------------------------------------------- */
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
   .ad-table-wrap { overflow-x: visible; }
 
   /* Each row becomes a card: a two-column grid of label/value pairs so the
@@ -513,17 +719,120 @@ table.ad-table {
 .ad-empty h3 { margin: 0 0 4px; font-size: 14px; color: var(--ad-text-2); }
 .ad-empty p { margin: 0 0 16px; font-size: 13px; }
 
-/* pagination */
-.ad-pager { display: flex; align-items: center; gap: 6px; padding: 12px 18px; border-top: 1px solid var(--ad-border-soft); }
-.ad-pager a, .ad-pager span {
-  display: grid; place-items: center;
-  min-width: 30px; height: 30px; padding: 0 8px;
-  font-size: 12.5px; border-radius: 7px;
-  border: 1px solid var(--ad-border); color: var(--ad-text-2);
+/* Empty state inside a fixed-height table.
+   Important: the <table> must NOT be stretched to fill the scroll box with
+   `min-height: 100%`. A table distributes any extra height across its rows,
+   so a single-row result would render as one giant row filling the whole
+   area. Rows keep their natural height and the leftover space below simply
+   stays empty; only the empty-state message is centred in the free space. */
+.ad-table-wrap[data-fixed-table] .ad-table { min-height: 0; }
+.ad-table-wrap[data-fixed-table] .ad-table tbody tr { height: auto; }
+.ad-table-wrap[data-fixed-table] .ad-table tbody tr:has(.ad-empty) td { height: auto; padding: 0; }
+.ad-table-wrap[data-fixed-table] .ad-table tbody tr:has(.ad-empty) { height: 0; }
+.ad-table-wrap[data-fixed-table] .ad-empty {
+  position: sticky;
+  left: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  /* Fill exactly the scroll box's interior (minus the 38px sticky header) so
+     the message is centred without the box gaining a scrollbar of its own. */
+  height: calc(var(--ad-table-h, calc(100vh - 260px)) - 39px);
+  padding: 0 20px;
+  box-sizing: border-box;
 }
-.ad-pager a:hover { background: var(--ad-surface-2); }
-.ad-pager .cur { background: var(--ad-primary); border-color: var(--ad-primary); color: #fff; font-weight: 600; }
-.ad-pager .spacer { flex: 1; border: none; }
+.ad-table-wrap[data-fixed-table] .ad-empty > * { flex: 0 0 auto; }
+.ad-table-wrap[data-fixed-table] .ad-empty p:last-child { margin-bottom: 0; }
+
+/* pagination styles live in the "Pager" block above */
+
+/* ------------------------------------------------------ analytics page */
+.an-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.an-note { font-size: 12px; color: var(--ad-text-3); white-space: nowrap; }
+.an-ga {
+  font-size: 12px; padding: 4px 9px; border-radius: 999px;
+  color: var(--ad-text-3); background: var(--ad-surface-2); border: 1px solid var(--ad-border);
+}
+.an-ga.is-on { color: var(--ad-success); background: var(--ad-success-soft); border-color: transparent; }
+
+.an-chart-body { padding: 16px 18px 10px; }
+/* ECharts needs an explicit height on its container. */
+.an-chart { width: 100%; height: 300px; }
+.an-chart-sm { width: 100%; height: 240px; }
+.an-chart-top { width: 100%; height: 340px; }
+.an-bar { fill: var(--ad-primary); opacity: .85; }
+.an-bar:hover { opacity: 1; }
+.an-line { fill: none; stroke: #F59E0B; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.an-dot { fill: #F59E0B; }
+.an-grid { stroke: var(--ad-border-soft); stroke-width: 1; stroke-dasharray: 3 3; }
+.an-axis { fill: var(--ad-text-3); font-size: 10px; }
+
+.an-legend { display: flex; gap: 16px; margin-bottom: 8px; font-size: 12px; color: var(--ad-text-2); }
+.an-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.an-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.an-swatch-bar { background: var(--ad-primary); }
+.an-swatch-line { background: #F59E0B; border-radius: 50%; }
+.an-swatch-ga { background: #10B981; }
+.an-swatch-gauser { background: #EF4444; border-radius: 50%; }
+/* GA series drawn dashed: same axis, visually distinct from D1. */
+.an-line-ga { fill: none; stroke: #10B981; stroke-width: 2; stroke-dasharray: 5 3;
+              stroke-linejoin: round; stroke-linecap: round; }
+.an-line-gauser { fill: none; stroke: #EF4444; stroke-width: 1.6; stroke-dasharray: 2 3;
+                  stroke-linejoin: round; stroke-linecap: round; }
+.an-ga-hint { margin-top: 8px; font-size: 12px; color: var(--ad-warn); }
+
+.an-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+/* All three comparison cards share one height, filled or empty: the grid
+   stretches its items and the card body is a flex column so the note sits at
+   the bottom and the empty state centres in the remaining space. */
+.an-grid-3 > .ad-card { display: flex; flex-direction: column; }
+.an-grid-3 > .ad-card > .ad-card-body { flex: 1 1 auto; }
+.an-cmp { display: flex; flex-direction: column; gap: 8px; min-height: 96px; }
+.an-cmp-rows { display: flex; flex-direction: column; gap: 8px; }
+.an-cmp-row { display: flex; align-items: baseline; justify-content: space-between; font-size: 13px; color: var(--ad-text-2); }
+.an-cmp-row strong { font-size: 18px; font-variant-numeric: tabular-nums; color: var(--ad-text); }
+.an-cmp-row strong.is-good { color: var(--ad-success); }
+.an-cmp-row strong.is-warn { color: var(--ad-warn); }
+/* Pushed to the bottom of the card so all three footers line up. */
+.an-cmp-note { font-size: 11.5px; color: var(--ad-text-3); line-height: 1.6; margin-top: auto; }
+/* Empty state occupies the same area the numbers would, vertically centred. */
+.an-cmp-empty {
+  flex: 1 1 auto; display: flex; align-items: center; justify-content: center;
+  min-height: 48px; text-align: center;
+  font-size: 12.5px; color: var(--ad-text-3); line-height: 1.6;
+}
+
+.an-chart-empty {
+  text-align: center; padding: 56px 20px; color: var(--ad-text-3);
+}
+.an-empty-title { font-size: 14px; font-weight: 600; color: var(--ad-text-2); margin-bottom: 4px; }
+.an-chart-empty p { margin: 0; font-size: 13px; }
+.an-empty-sub { font-size: 13px; color: var(--ad-text-3); padding: 8px 0; }
+
+/* Horizontal bar ranking (countries, referrers) */
+.an-rank { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.an-rank-item { display: grid; grid-template-columns: minmax(0, 9em) minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.an-rank-name {
+  font-size: 12.5px; color: var(--ad-text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.an-rank-track {
+  height: 8px; border-radius: 999px; background: var(--ad-surface-2); overflow: hidden;
+}
+.an-rank-track > i {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--ad-primary), #8B5CF6);
+  min-width: 2px;
+}
+.an-rank-value { font-size: 12px; color: var(--ad-text-2); font-variant-numeric: tabular-nums; text-align: right; }
+
+@media (max-width: 900px) {
+  .an-grid-2 { grid-template-columns: 1fr; }
+  .an-grid-3 { grid-template-columns: 1fr; }
+  /* Single column: cards stand alone, but keep the body tall enough that an
+     empty card looks the same as a filled one instead of collapsing. */
+  .an-cmp { min-height: 128px; }
+  .an-chart { height: 180px; }
+  .an-rank-item { grid-template-columns: minmax(0, 7em) minmax(0, 1fr) auto; }
+}
 
 /* toolbar */
 .ad-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -673,11 +982,6 @@ body.is-loading .ad-loader { display: flex; opacity: 1; }
   letter-spacing: .01em;
 }
 
-/* Below the drawer breakpoint the rail is off-canvas, so cover everything. */
-@media (max-width: 900px) {
-  .ad-loader { left: 0; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .ad-loader-bar span, .ad-loader-spin { animation-duration: 2.4s; }
   .ad-loader { transition: none; }
@@ -712,6 +1016,10 @@ body.is-loading .ad-loader { display: flex; opacity: 1; }
   .ad-toolbar .ad-select { flex: 1 1 calc(50% - 4px); min-width: 0; }
   .ad-toolbar .ad-btn { flex: 0 0 auto; }
 
+  /* Narrow-ish desktops: the filter row + "add" button need two rows so the
+     primary action never overlaps the toolbar (card head is a fixed 64px). */
+  .ad-card-head .ad-toolbar + .ad-btn-primary { margin-left: auto; }
+
   /* The primary "add" action drops onto its own row instead of floating
      beside the filters — but only when cards genuinely get narrow. */
   .ad-card-head > .ad-btn-primary { flex: 0 0 auto; }
@@ -722,6 +1030,40 @@ body.is-loading .ad-loader { display: flex; opacity: 1; }
   /* Dashboard two-column blocks collapse. */
   .dash-grid { grid-template-columns: 1fr !important; }
   .form-grid, .imp-grid, .sub-grid { grid-template-columns: 1fr !important; }
+
+  /* Rows become cards here, so the inner scroll area is pointless: restore a
+     normal flow (the page itself scrolls) and drop the sticky header. */
+  .ad-main { height: auto; overflow: visible; }
+  .ad-content { display: block; overflow: visible; }
+  .ad-card:has([data-fixed-table]) { display: block; flex: 0 0 auto; }
+  .ad-table-wrap[data-fixed-table] { height: auto; max-height: none; min-height: 0; flex: none; overflow: visible; }
+  .ad-table-wrap[data-fixed-table] .ad-table thead th { position: static; }
+  /* The fixed-height empty state belongs to the desktop scroll box only; here
+     the table is a plain block, so let the message size itself. */
+  .ad-table-wrap[data-fixed-table] .ad-empty {
+    height: auto; min-height: 0; position: static; padding: 40px 16px;
+  }
+  /* Undo the "zero-height empty row" trick used by the fixed desktop layout,
+     otherwise the row collapses to 0px and the message spills out of it. */
+  .ad-table-wrap[data-fixed-table] .ad-table tbody tr:has(.ad-empty),
+  .ad-table-wrap[data-fixed-table] .ad-table tbody tr:has(.ad-empty) td {
+    height: auto;
+  }
+  /* Card mode lays rows out as blocks; fixed table layout / fixed row heights
+     would collapse them. */
+  .ad-table-wrap[data-fixed-table] .ad-table { table-layout: auto; width: 100%; }
+  .ad-table-wrap[data-fixed-table] .ad-table tbody tr:not(:has(.ad-empty)),
+  .ad-table-wrap[data-fixed-table] .ad-table tbody td { height: auto; }
+  .ad-table-wrap[data-fixed-table] .ad-table th,
+  .ad-table-wrap[data-fixed-table] .ad-table td { white-space: normal; overflow: visible; text-overflow: clip; }
+  .ad-table-wrap[data-fixed-table] .ad-table td:first-child,
+  .ad-table-wrap[data-fixed-table] .ad-table th:first-child,
+  .ad-table-wrap[data-fixed-table] .ad-table td:last-child,
+  .ad-table-wrap[data-fixed-table] .ad-table th:last-child { width: auto; }
+
+  .ad-pager { justify-content: space-between; }
+  .ad-pager-nav { margin-left: 0; }
+  .ad-loader { left: 0; }
 }
 
 @media (max-width: 560px) {
@@ -738,9 +1080,16 @@ body.is-loading .ad-loader { display: flex; opacity: 1; }
   table.ad-table tbody tr { padding: 12px; }
   .ad-btn-sm { height: 30px; }
 
-  /* Pager: keep the page buttons reachable without wrapping oddly. */
-  .ad-pager { flex-wrap: wrap; gap: 4px; padding: 12px 14px; }
-  .ad-pager .spacer { display: none; }
+  /* Pager: info and rows-per-page on one line, page buttons wrap below. */
+  .ad-pager { flex-wrap: wrap; gap: 8px; padding: 12px 14px; }
+  .ad-pager-info { flex: 1 1 100%; }
+  .ad-pager-nav { order: 2; margin-left: 0; gap: 3px; flex-wrap: wrap; }
+  .ad-pager-size { order: 3; margin-left: auto; }
+  .ad-select-sm { min-width: 88px; }
+
+  /* Too narrow for a 7-number window: keep the ends and neighbours only. */
+  .ad-pager-num:not(.cur):not(.is-adjacent) { display: none; }
+  .ad-pager-btn, .ad-pager-num { min-width: 28px; height: 28px; padding: 0 6px; font-size: 12px; }
 }
 
 /* Very narrow phones: single-column stats. */

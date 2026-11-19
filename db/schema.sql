@@ -62,16 +62,39 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log (created_at DESC);
 
--- Full text-ish search helper -------------------------------------------------
--- D1 (SQLite) LIKE is used for search; keep an index-friendly lowercase copy.
--- (Generated columns are supported, but LIKE with leading wildcard still scans;
---  the dataset is small enough that this is fine and keeps the schema portable.)
-
--- Simple click tracking for the "popular" ordering ---------------------------
-CREATE TABLE IF NOT EXISTS settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
+-- ===========================================================================
+-- Click tracking — the source of truth for "访问" statistics.
+--
+-- Every click on a tool's 访问 button is recorded as one row here. The
+-- `tools.visit_count` column is a denormalised cache of this table (kept in
+-- sync by the same statement) so the public site can sort by popularity
+-- without an aggregate over the log.
+--
+-- Columns are deliberately minimal and privacy-preserving
+--   * ip_hash : salted SHA-256 of the client IP (never the raw address);
+--               used only to drop duplicate clicks inside DEDUPE_WINDOW
+--   * visitor : random per-browser id kept in localStorage, so distinct
+--               visitors can be counted across sessions
+--   * country / referer : coarse attribution, straight from the edge headers
+--
+-- The same click is also sent to GA4 via the Measurement Protocol, so both
+-- stores stay comparable.
+-- ===========================================================================
+CREATE TABLE IF NOT EXISTS click_events (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  tool_id    INTEGER NOT NULL REFERENCES tools (id) ON DELETE CASCADE,
+  ip_hash    TEXT    NOT NULL DEFAULT '',
+  visitor    TEXT    NOT NULL DEFAULT '',
+  country    TEXT    NOT NULL DEFAULT '',
+  referer    TEXT    NOT NULL DEFAULT '',
+  path       TEXT    NOT NULL DEFAULT '',
+  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_clicks_tool_time ON click_events (tool_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_clicks_time      ON click_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_clicks_visitor   ON click_events (visitor, created_at DESC);
+-- De-duplication probe: "did this IP click this tool in the last minute?"
+CREATE INDEX IF NOT EXISTS idx_clicks_dedupe    ON click_events (ip_hash, tool_id, created_at DESC);
 
 -- ===========================================================================
 -- Tool submissions — the public "提交工具" form.

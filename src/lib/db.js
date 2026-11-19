@@ -48,6 +48,19 @@ export async function listCategories(db, { includeHidden = false } = {}) {
   return results || [];
 }
 
+/** Paginated category list for the /admin/categories table. */
+export async function listCategoriesPage(db, { includeHidden = true, page = 1, perPage = 20 } = {}) {
+  const where = includeHidden ? '' : 'WHERE visible = 1';
+  const countRow = await db.prepare(`SELECT COUNT(*) AS n FROM categories ${where}`).first();
+  const total = countRow?.n || 0;
+  const offset = (Math.max(1, page) - 1) * perPage;
+  const { results } = await db
+    .prepare(`SELECT * FROM categories ${where} ORDER BY sort_order, id LIMIT ? OFFSET ?`)
+    .bind(perPage, offset)
+    .all();
+  return { categories: results || [], total, page, perPage };
+}
+
 export async function getCategoryBySlug(db, slug) {
   return db.prepare('SELECT * FROM categories WHERE slug = ?').bind(slug).first();
 }
@@ -154,7 +167,14 @@ export async function getTool(db, id) {
   return rowToTool(r);
 }
 
-export async function listToolsAdmin(db, { q = '', category = '', status = '', page = 1, perPage = 20 } = {}) {
+/** Orderings offered by the admin tool list (allow-listed: never interpolate raw input). */
+const TOOL_SORTS = {
+  updated: 't.updated_at DESC, t.id DESC',
+  visits: 't.visit_count DESC, t.id DESC',
+  name: 't.name ASC, t.id ASC',
+};
+
+export async function listToolsAdmin(db, { q = '', category = '', status = '', sort = 'updated', page = 1, perPage = 20 } = {}) {
   const where = [];
   const binds = [];
   if (q) {
@@ -165,6 +185,7 @@ export async function listToolsAdmin(db, { q = '', category = '', status = '', p
   if (category) { where.push('t.category_id = ?'); binds.push(Number(category)); }
   if (status) { where.push('t.status = ?'); binds.push(status); }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const orderSql = TOOL_SORTS[sort] || TOOL_SORTS.updated;
 
   const countRow = await db
     .prepare(`SELECT COUNT(*) AS n FROM tools t ${whereSql}`)
@@ -178,7 +199,7 @@ export async function listToolsAdmin(db, { q = '', category = '', status = '', p
       `SELECT t.*, c.name AS category_name
        FROM tools t LEFT JOIN categories c ON c.id = t.category_id
        ${whereSql}
-       ORDER BY t.updated_at DESC, t.id DESC
+       ORDER BY ${orderSql}
        LIMIT ? OFFSET ?`
     )
     .bind(...binds, perPage, offset)
@@ -251,6 +272,165 @@ export async function incrementVisits(db, id) {
   await db.prepare('UPDATE tools SET visit_count = visit_count + 1 WHERE id = ?').bind(id).run();
 }
 
+// --- click tracking ---------------------------------------------------------
+// Clicks on a tool's "访问" button. `click_events` is the source of truth;
+// tools.visit_count is a cache of it.
+
+/** Clicks allowed from one IP to one tool inside this window (seconds). */
+export const DEDUPE_WINDOW = 60;
+
+/**
+ * Record one click.
+ *
+ * Returns `{ recorded: false, reason }` when the click is ignored:
+ *   - tool does not exist or is not published
+ *   - the same IP already clicked this tool within DEDUPE_WINDOW
+ *
+ * When recorded, the visitor id is echoed back so the caller can persist it
+ * client-side for cross-session visitor counting.
+ */
+export async function recordClick(db, { toolId, ipHash = '', visitor = '', country = '', referer = '', path = '' }) {
+  const tool = await db
+    .prepare("SELECT id FROM tools WHERE id = ? AND status = 'published'")
+    .bind(toolId)
+    .first();
+  if (!tool) return { recorded: false, reason: 'not_found' };
+
+  if (ipHash) {
+    const recent = await db
+      .prepare(
+        `SELECT 1 AS hit FROM click_events
+         WHERE ip_hash = ? AND tool_id = ?
+           AND created_at >= datetime('now', ?)
+         LIMIT 1`
+      )
+      .bind(ipHash, toolId, `-${DEDUPE_WINDOW} seconds`)
+      .first();
+    if (recent) return { recorded: false, reason: 'duplicate' };
+  }
+
+  // Same transaction keeps the log and the popularity cache consistent.
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO click_events (tool_id, ip_hash, visitor, country, referer, path)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .bind(toolId, ipHash, visitor, country, referer.slice(0, 500), path.slice(0, 300)),
+    db.prepare('UPDATE tools SET visit_count = visit_count + 1 WHERE id = ?').bind(toolId),
+  ]);
+
+  return { recorded: true, toolId };
+}
+
+/** Merge click rows into the visit_count cache (useful after manual edits). */
+export async function rebuildVisitCounts(db) {
+  await db
+    .prepare(
+      `UPDATE tools SET visit_count = (
+         SELECT COUNT(*) FROM click_events e WHERE e.tool_id = tools.id
+       )`
+    )
+    .run();
+}
+
+/**
+ * Aggregated analytics for the /admin/analytics dashboard.
+ * `days` bounds every series; all buckets are returned even when empty so the
+ * charts keep a stable x-axis.
+ */
+export async function analyticsSummary(db, { days = 30 } = {}) {
+  const since = `-${days - 1} days`;
+  const [
+    totals,
+    daily,
+    topTools,
+    byCountry,
+    byReferer,
+  ] = await Promise.all([
+    db
+      .prepare(
+        `SELECT
+           COUNT(*) AS clicks,
+           COUNT(DISTINCT visitor) AS visitors,
+           COUNT(DISTINCT tool_id) AS tools,
+           COUNT(DISTINCT date(created_at)) AS active_days
+         FROM click_events
+         WHERE created_at >= datetime('now', ?)`
+      )
+      .bind(since)
+      .first(),
+    db
+      .prepare(
+        `SELECT date(created_at) AS day, COUNT(*) AS clicks,
+                COUNT(DISTINCT visitor) AS visitors
+         FROM click_events
+         WHERE created_at >= datetime('now', ?)
+         GROUP BY day ORDER BY day`
+      )
+      .bind(since)
+      .all(),
+    db
+      .prepare(
+        `SELECT t.id, t.name, t.slug, t.status, t.pricing,
+                c.name AS category_name,
+                COUNT(e.id) AS clicks,
+                COUNT(DISTINCT e.visitor) AS visitors
+         FROM click_events e
+         JOIN tools t ON t.id = e.tool_id
+         LEFT JOIN categories c ON c.id = t.category_id
+         WHERE e.created_at >= datetime('now', ?)
+         GROUP BY t.id
+         ORDER BY clicks DESC, t.id DESC
+         LIMIT 20`
+      )
+      .bind(since)
+      .all(),
+    db
+      .prepare(
+        `SELECT CASE WHEN country = '' THEN '(未知)' ELSE country END AS country,
+                COUNT(*) AS clicks
+         FROM click_events
+         WHERE created_at >= datetime('now', ?)
+         GROUP BY country
+         ORDER BY clicks DESC
+         LIMIT 10`
+      )
+      .bind(since)
+      .all(),
+    db
+      .prepare(
+        `SELECT CASE
+                  WHEN referer = '' THEN '(直接访问)'
+                  WHEN referer LIKE '%somarkit.com%' THEN '(站内)'
+                  ELSE referer
+                END AS source,
+                COUNT(*) AS clicks
+         FROM click_events
+         WHERE created_at >= datetime('now', ?)
+         GROUP BY source
+         ORDER BY clicks DESC
+         LIMIT 10`
+      )
+      .bind(since)
+      .all(),
+  ]);
+
+  return {
+    days,
+    totals: {
+      clicks: totals?.clicks || 0,
+      visitors: totals?.visitors || 0,
+      tools: totals?.tools || 0,
+      activeDays: totals?.active_days || 0,
+    },
+    daily: daily.results || [],
+    topTools: topTools.results || [],
+    byCountry: byCountry.results || [],
+    byReferer: byReferer.results || [],
+  };
+}
+
 // --- admins -----------------------------------------------------------------
 
 export async function findAdminByEmail(db, email) {
@@ -260,6 +440,18 @@ export async function findAdminByEmail(db, email) {
 export async function listAdmins(db) {
   const { results } = await db.prepare('SELECT * FROM admins ORDER BY id').all();
   return results || [];
+}
+
+/** Paginated admin list for the /admin/admins table (same shape as the others). */
+export async function listAdminsPage(db, { page = 1, perPage = 20 } = {}) {
+  const countRow = await db.prepare('SELECT COUNT(*) AS n FROM admins').first();
+  const total = countRow?.n || 0;
+  const offset = (Math.max(1, page) - 1) * perPage;
+  const { results } = await db
+    .prepare('SELECT * FROM admins ORDER BY id LIMIT ? OFFSET ?')
+    .bind(perPage, offset)
+    .all();
+  return { admins: results || [], total, page, perPage };
 }
 
 export async function upsertAdminOnLogin(db, { email, name, picture }) {
@@ -303,6 +495,26 @@ export async function listAudit(db, limit = 60) {
     .bind(limit)
     .all();
   return results || [];
+}
+
+/**
+ * Paginated audit log. `actor` optionally narrows to one admin (exact match),
+ * driven by the search box on the /admin/audit page.
+ */
+export async function listAuditPage(db, { page = 1, perPage = 20, actor = '' } = {}) {
+  const where = actor ? 'WHERE actor LIKE ?' : '';
+  const binds = actor ? [`%${actor}%`] : [];
+  const countRow = await db
+    .prepare(`SELECT COUNT(*) AS n FROM audit_log ${where}`)
+    .bind(...binds)
+    .first();
+  const total = countRow?.n || 0;
+  const offset = (Math.max(1, page) - 1) * perPage;
+  const { results } = await db
+    .prepare(`SELECT * FROM audit_log ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
+    .bind(...binds, perPage, offset)
+    .all();
+  return { entries: results || [], total, page, perPage };
 }
 
 export async function deleteAuditLog(db) {

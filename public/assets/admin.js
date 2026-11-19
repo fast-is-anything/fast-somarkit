@@ -184,6 +184,75 @@
   window.addEventListener('pageshow', function () { setContentLoading(false); });
   window.addEventListener('pagehide', function () { setContentLoading(false); });
 
+  /* ------------------------------------------------------------ pager --- */
+  // The rows-per-page picker carries the destination URL as its option value.
+  document.addEventListener('change', function (e) {
+    var sel = e.target;
+    if (!sel || !sel.matches || !sel.matches('[data-pager-size]')) return;
+    if (sel.value) window.location.href = sel.value;
+  });
+
+  /* ------------------------------------------------- fixed table height --- */
+  // Every list table gets the same height so the layout doesn't jump between
+  // pages with 0 rows and 120 rows. The table takes whatever vertical space is
+  // left in the viewport after the chrome above it (topbar, banner, card
+  // head, pager, extra cards), which keeps every page scrolling-free.
+  //
+  // The main column is NOT locked to 100vh any more (that broke long pages on
+  // mobile), so available height is derived from the viewport and the elements
+  // that sit above the table.
+  function fitTable() {
+    var wrap = document.querySelector('.ad-table-wrap[data-fixed-table]');
+    if (!wrap) return;
+    var content = document.querySelector('.ad-content');
+    if (!content) return;
+    // Below the drawer breakpoint rows become cards and the page scrolls
+    // naturally — a fixed height would just waste space.
+    if (window.innerWidth <= 900) {
+      wrap.style.removeProperty('--ad-table-h');
+      return;
+    }
+
+    var cs = getComputedStyle(content);
+    var padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    var contentBox = content.getBoundingClientRect();
+
+    // Everything in the content column above the list card (banners, stats,
+    // toolbars) plus the content's own top padding.
+    var aboveCard = 0;
+    var card = wrap.parentElement;
+    for (var i = 0; i < content.children.length; i++) {
+      var el = content.children[i];
+      if (el === card) break;
+      var ecs = getComputedStyle(el);
+      aboveCard += el.getBoundingClientRect().height +
+        parseFloat(ecs.marginTop) + parseFloat(ecs.marginBottom);
+    }
+
+    // Card chrome: header + pager + borders.
+    var chrome = 0;
+    for (var j = 0; j < card.children.length; j++) {
+      var child = card.children[j];
+      if (child === wrap) continue;
+      var ccs = getComputedStyle(child);
+      chrome += child.getBoundingClientRect().height +
+        parseFloat(ccs.marginTop) + parseFloat(ccs.marginBottom);
+    }
+
+    // Space between the card top and the bottom of the window.
+    var viewportBudget = window.innerHeight - contentBox.top - padY - aboveCard;
+    var h = Math.floor(viewportBudget - chrome);
+
+    // Never let the table push the page taller than the viewport; if the
+    // window is very short, fall back to a still-scrollable minimum.
+    if (h > 120) wrap.style.setProperty('--ad-table-h', h + 'px');
+  }
+  fitTable();
+  window.addEventListener('resize', fitTable);
+  // Re-fit once the webfonts/layout settle (heights can shift a few px).
+  window.addEventListener('load', fitTable);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTable);
+
   /* --------------------------------------------------------- confirmations */
   document.addEventListener('submit', function (e) {
     var form = e.target;

@@ -10,6 +10,7 @@ import { PRICING, TOOL_STATUS } from '../lib/db.js';
 const NAV = [
   { group: '概览', items: [
     { href: '/admin', label: '仪表盘', icon: UI.dashboard, match: '/admin' },
+    { href: '/admin/analytics', label: '访问统计', icon: UI.chart, match: '/admin/analytics' },
     { href: '/admin/submissions', label: '工具提交', icon: UI.inbox, match: '/admin/submissions' },
     { href: '/admin/tools', label: '工具管理', icon: UI.sparkle, match: '/admin/tools' },
     { href: '/admin/categories', label: '分类管理', icon: UI.globe, match: '/admin/categories' },
@@ -210,8 +211,8 @@ export function dashboardPage({ user, env, stats, top, recent, categories, audit
       <div class="ad-stat-sub">${esc(s.sub)}</div>
     </div>`).join('');
 
-  const topRows = top.slice(0, 8).map((t, i) => `<tr>
-      <td style="width:36px;color:var(--ad-text-3);font-variant-numeric:tabular-nums">${i + 1}</td>
+  const topRows = top.slice(0, 10).map((t, i) => `<tr>
+      <td class="ad-cell-rank">${i + 1}</td>
       <td>
         <div class="ad-cell-main">${esc(t.name)}</div>
         <div class="ad-cell-sub">${esc(t.category_name || '未分类')}</div>
@@ -220,7 +221,7 @@ export function dashboardPage({ user, env, stats, top, recent, categories, audit
       <td class="num">${t.visit_count}</td>
     </tr>`).join('');
 
-  const recentRows = recent.slice(0, 6).map((t) => `<tr>
+  const recentRows = recent.slice(0, 10).map((t) => `<tr>
       <td data-label="工具">
         <div class="ad-cell-main">${esc(t.name)}</div>
         <div class="ad-cell-sub">${esc(t.slug)}</div>
@@ -252,10 +253,13 @@ export function dashboardPage({ user, env, stats, top, recent, categories, audit
         </div>
       </div>
       <div class="ad-card">
-        <div class="ad-card-head"><h2>访问排行</h2></div>
+        <div class="ad-card-head">
+          <h2>访问排行</h2><span class="spacer"></span>
+          <a class="ad-btn ad-btn-sm" href="/admin/tools?sort=visits">全部排行</a>
+        </div>
         <div class="ad-table-wrap">
           <table class="ad-table">
-            <thead><tr><th>#</th><th>工具</th><th>定价</th><th class="num">访问</th></tr></thead>
+            <thead><tr><th class="ad-cell-rank">#</th><th>工具</th><th>定价</th><th class="num">访问</th></tr></thead>
             <tbody>${topRows || '<tr><td colspan="4" style="text-align:center;color:var(--ad-text-3);padding:32px">暂无数据</td></tr>'}</tbody>
           </table>
         </div>
@@ -280,7 +284,7 @@ export function dashboardPage({ user, env, stats, top, recent, categories, audit
 
 // --- tools list -------------------------------------------------------------
 
-export function toolsPage({ user, env, tools, total, page, perPage, pages, q, category, status, categories, flash }) {
+export function toolsPage({ user, env, tools, total, page, perPage, pages, q, category, status, sort = 'updated', categories, flash }) {
   const rows = tools.map((t) => `<tr>
     <td data-label="工具">
       <div class="ad-cell-main">${esc(t.name)}</div>
@@ -309,6 +313,9 @@ export function toolsPage({ user, env, tools, total, page, perPage, pages, q, ca
   const opts = categories.map((c) => `<option value="${c.id}" ${String(c.id) === String(category) ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
   const statusOpts = Object.entries(TOOL_STATUS).map(([k, v]) =>
     `<option value="${k}" ${k === status ? 'selected' : ''}>${v}</option>`).join('');
+  const SORTS = { updated: '按更新时间', visits: '按访问量', name: '按名称' };
+  const sortOpts = Object.entries(SORTS).map(([k, v]) =>
+    `<option value="${k}" ${k === sort ? 'selected' : ''}>${v}</option>`).join('');
 
   const children = `
     ${flash ? `<div class="ad-alert ad-alert-${esc(flash.type)}" id="adFlash" data-message="1">${esc(flash.message)}</div>` : ''}
@@ -325,12 +332,15 @@ export function toolsPage({ user, env, tools, total, page, perPage, pages, q, ca
           <select class="ad-select" name="status">
             <option value="">全部状态</option>${statusOpts}
           </select>
+          <select class="ad-select" name="sort">
+            ${sortOpts}
+          </select>
           <button class="ad-btn" type="submit">筛选</button>
-          ${(q || category || status) ? '<a class="ad-btn ad-btn-ghost" href="/admin/tools">重置</a>' : ''}
+          ${(q || category || status || (sort && sort !== 'updated')) ? '<a class="ad-btn ad-btn-ghost" href="/admin/tools">重置</a>' : ''}
         </form>
         <a class="ad-btn ad-btn-primary" href="/admin/tools/new">${UI.plus}新增工具</a>
       </div>
-      <div class="ad-table-wrap">
+      <div class="ad-table-wrap" data-fixed-table>
         <table class="ad-table">
           <thead><tr>
             <th>工具</th><th>分类</th><th>定价</th><th>标记</th><th>状态</th>
@@ -342,35 +352,98 @@ export function toolsPage({ user, env, tools, total, page, perPage, pages, q, ca
           </td></tr>`}</tbody>
         </table>
       </div>
-      ${pages > 1 ? pager({ page, pages, q, category, status }) : ''}
-      <div class="ad-pager"><span style="border:none;padding:0;color:var(--ad-text-3)">共 ${total} 条</span></div>
+      ${tablePager({
+        page, pages, total, perPage,
+        basePath: listHref('/admin/tools', { q, category, status, sort: sort === 'updated' ? '' : sort }),
+      })}
     </div>
   `;
 
   return adminLayout({ title: '工具管理', breadcrumb: '收录、编辑与上下架', user, env, children, activePath: '/admin/tools' });
 }
 
-function pager({ page, pages, q, category, status }) {
-  const qs = (p) => {
-    const sp = new URLSearchParams();
-    if (q) sp.set('q', q);
-    if (category) sp.set('category', category);
-    if (status) sp.set('status', status);
-    sp.set('page', p);
-    return `/admin/tools?${sp.toString()}`;
-  };
+/**
+ * Shared pager footer for every admin table.
+ *
+ * Renders "显示第 a–b 条，共 n 条" plus first/prev/paged-window/next/last
+ * links and a rows-per-page selector. Every page builds `basePath(params)`
+ * so the component never needs to know which filters a page has.
+ */
+function tablePager({ page, pages, total, perPage, basePath, extraParams = {}, unit = '条' }) {
+  const safePages = Math.max(1, pages || 1);
+  const safePage = Math.min(Math.max(1, page || 1), safePages);
+  const from = total === 0 ? 0 : (safePage - 1) * perPage + 1;
+  const to = Math.min(total, safePage * perPage);
+
+  const href = (p, pp = perPage) => basePath({ ...extraParams, page: p, perPage: pp });
+
+  // A window of at most 7 page links, with 1 and `pages` always reachable.
+  const windowSize = 7;
+  let start = Math.max(1, safePage - Math.floor(windowSize / 2));
+  let end = Math.min(safePages, start + windowSize - 1);
+  start = Math.max(1, end - windowSize + 1);
   const nums = [];
-  const start = Math.max(1, page - 2);
-  const end = Math.min(pages, start + 4);
-  for (let i = start; i <= end; i++) {
-    nums.push(i === page ? `<span class="cur">${i}</span>` : `<a href="${qs(i)}">${i}</a>`);
+  const isNear = (i) => Math.abs(i - safePage) <= 1;
+  const cls = (i) => `ad-pager-num${isNear(i) ? ' is-adjacent' : ''}`;
+  if (start > 1) {
+    nums.push(`<a href="${href(1)}" class="${cls(1)}">1</a>`);
+    if (start > 2) nums.push('<span class="ad-pager-gap">…</span>');
   }
-  return `<div class="ad-pager">
-    ${page > 1 ? `<a href="${qs(page - 1)}">上一页</a>` : ''}
-    ${nums.join('')}
-    ${page < pages ? `<a href="${qs(page + 1)}">下一页</a>` : ''}
-    <span class="spacer"></span>
+  for (let i = start; i <= end; i++) {
+    nums.push(i === safePage
+      ? `<span class="${cls(i)} cur" aria-current="page">${i}</span>`
+      : `<a href="${href(i)}" class="${cls(i)}">${i}</a>`);
+  }
+  if (end < safePages) {
+    if (end < safePages - 1) nums.push('<span class="ad-pager-gap">…</span>');
+    nums.push(`<a href="${href(safePages)}" class="${cls(safePages)}">${safePages}</a>`);
+  }
+
+  const perPageOpts = [10, 20, 50, 100].map((n) =>
+    `<option value="${href(1, n)}" ${n === perPage ? 'selected' : ''}>${n} 行/页</option>`).join('');
+
+  return `<div class="ad-pager" data-pager>
+    <div class="ad-pager-info">
+      显示第 <strong>${from}–${to}</strong> ${unit}，共 <strong>${total}</strong> ${unit}
+    </div>
+    <div class="ad-pager-nav">
+      <a class="ad-pager-btn ${safePage <= 1 ? 'is-disabled' : ''}" href="${href(1)}"
+         ${safePage <= 1 ? 'aria-disabled="true" tabindex="-1"' : ''} aria-label="首页">${UI.chevronsLeft}</a>
+      <a class="ad-pager-btn ${safePage <= 1 ? 'is-disabled' : ''}" href="${href(Math.max(1, safePage - 1))}"
+         ${safePage <= 1 ? 'aria-disabled="true" tabindex="-1"' : ''} aria-label="上一页">${UI.chevronLeft}</a>
+      ${nums.join('')}
+      <a class="ad-pager-btn ${safePage >= safePages ? 'is-disabled' : ''}" href="${href(Math.min(safePages, safePage + 1))}"
+         ${safePage >= safePages ? 'aria-disabled="true" tabindex="-1"' : ''} aria-label="下一页">${UI.chevronRight}</a>
+      <a class="ad-pager-btn ${safePage >= safePages ? 'is-disabled' : ''}" href="${href(safePages)}"
+         ${safePage >= safePages ? 'aria-disabled="true" tabindex="-1"' : ''} aria-label="末页">${UI.chevronsRight}</a>
+    </div>
+    <div class="ad-pager-size">
+      <select class="ad-select ad-select-sm" data-pager-size aria-label="每页显示条数">
+        ${perPageOpts}
+      </select>
+    </div>
   </div>`;
+}
+
+/**
+ * Build a URL builder for one admin list page.
+ * `base` is the route, `params` the current filter state; calling the returned
+ * function with a patch yields a href, dropping defaults (page=1, perPage=20)
+ * so URLs stay clean.
+ */
+function listHref(base, params = {}) {
+  return (next = {}) => {
+    const sp = new URLSearchParams();
+    const merged = { ...params, ...next };
+    for (const [k, v] of Object.entries(merged)) {
+      if (v === undefined || v === null || v === '') continue;
+      if (k === 'page' && Number(v) === 1) continue;
+      if (k === 'perPage' && Number(v) === 20) continue;
+      sp.set(k, v);
+    }
+    const qs = sp.toString();
+    return qs ? `${base}?${qs}` : base;
+  };
 }
 
 // --- tool form --------------------------------------------------------------
@@ -500,7 +573,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
 
 // --- categories -------------------------------------------------------------
 
-export function categoriesPage({ user, env, categories, counts, flash }) {
+export function categoriesPage({ user, env, categories, counts, total = 0, page = 1, perPage = 20, pages = 1, flash }) {
   const rows = categories.map((c) => `<tr>
     <td data-label="分类">
       <div class="ad-cell-main">${esc(c.name)}</div>
@@ -527,12 +600,13 @@ export function categoriesPage({ user, env, categories, counts, flash }) {
         <h2>全部分类</h2><span class="spacer"></span>
         <a class="ad-btn ad-btn-primary" href="/admin/categories/new">${UI.plus}新增分类</a>
       </div>
-      <div class="ad-table-wrap">
+      <div class="ad-table-wrap" data-fixed-table>
         <table class="ad-table">
           <thead><tr><th>分类</th><th>图标</th><th class="num">工具数</th><th class="num">排序</th><th>状态</th><th></th></tr></thead>
           <tbody>${rows || '<tr><td colspan="6"><div class="ad-empty">还没有分类</div></td></tr>'}</tbody>
         </table>
       </div>
+      ${tablePager({ page, pages, total, perPage, basePath: listHref('/admin/categories'), unit: '个' })}
     </div>
   `;
 
@@ -648,13 +722,13 @@ export function importPage({ user, env, flash, result, csvTemplate }) {
 
 // --- audit ------------------------------------------------------------------
 
-export function auditPage({ user, env, entries, flash }) {
+export function auditPage({ user, env, entries, total = 0, page = 1, perPage = 20, pages = 1, actor = '', flash }) {
   const rows = entries.map((a) => `<tr>
-    <td class="ad-cell-sub" style="white-space:nowrap">${esc(fmtTime(a.created_at))}</td>
-    <td>${esc(a.actor || '系统')}</td>
-    <td>${esc(actionLabel(a.action))}</td>
-    <td class="ad-cell-sub">${esc(a.entity)}${a.entity_id ? ` #${a.entity_id}` : ''}</td>
-    <td class="ad-cell-sub">${esc(a.detail || '—')}</td>
+    <td class="ad-cell-sub" data-label="时间" style="white-space:nowrap">${esc(fmtTime(a.created_at))}</td>
+    <td data-label="操作人">${esc(a.actor || '系统')}</td>
+    <td data-label="动作">${esc(actionLabel(a.action))}</td>
+    <td class="ad-cell-sub" data-label="对象">${esc(a.entity)}${a.entity_id ? ` #${a.entity_id}` : ''}</td>
+    <td class="ad-cell-sub" data-label="详情">${esc(a.detail || '—')}</td>
   </tr>`).join('');
 
   const children = `
@@ -662,16 +736,25 @@ export function auditPage({ user, env, entries, flash }) {
     <div class="ad-card">
       <div class="ad-card-head">
         <h2>操作日志</h2><span class="spacer"></span>
-        <form method="post" action="/admin/audit/clear" data-confirm="清空全部操作日志？">
+        <form method="get" class="ad-toolbar">
+          <div class="ad-search">
+            ${UI.search}
+            <input class="ad-input" type="search" name="actor" value="${esc(actor)}" placeholder="按操作人筛选…">
+          </div>
+          <button class="ad-btn" type="submit">筛选</button>
+          ${actor ? '<a class="ad-btn ad-btn-ghost" href="/admin/audit">重置</a>' : ''}
+        </form>
+        <form method="post" action="/admin/audit/clear" data-confirm="清空全部操作日志？" style="margin-left:8px">
           <button class="ad-btn ad-btn-sm ad-btn-danger" type="submit">${UI.trash}清空</button>
         </form>
       </div>
-      <div class="ad-table-wrap">
+      <div class="ad-table-wrap" data-fixed-table>
         <table class="ad-table">
           <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th></tr></thead>
           <tbody>${rows || '<tr><td colspan="5"><div class="ad-empty">暂无记录</div></td></tr>'}</tbody>
         </table>
       </div>
+      ${tablePager({ page, pages, total, perPage, basePath: listHref('/admin/audit', { actor }) })}
     </div>
   `;
 
@@ -680,9 +763,9 @@ export function auditPage({ user, env, entries, flash }) {
 
 // --- admins -----------------------------------------------------------------
 
-export function adminsPage({ user, env, admins, allowList, flash }) {
+export function adminsPage({ user, env, admins, allowList, total = 0, page = 1, perPage = 20, pages = 1, flash }) {
   const rows = admins.map((a) => `<tr>
-    <td>
+    <td data-label="账号">
       <div style="display:flex;align-items:center;gap:10px">
         ${avatar(a)}
         <div>
@@ -691,9 +774,9 @@ export function adminsPage({ user, env, admins, allowList, flash }) {
         </div>
       </div>
     </td>
-    <td>${a.role === 'owner' ? '<span class="ad-pill ad-pill-blue">所有者</span>' : '<span class="ad-pill ad-pill-gray">编辑</span>'}</td>
-    <td>${a.active ? '<span class="ad-pill ad-pill-green">启用</span>' : '<span class="ad-pill ad-pill-red">停用</span>'}</td>
-    <td class="ad-cell-sub" style="white-space:nowrap">${esc(a.last_login ? fmtTime(a.last_login) : '从未登录')}</td>
+    <td data-label="角色">${a.role === 'owner' ? '<span class="ad-pill ad-pill-blue">所有者</span>' : '<span class="ad-pill ad-pill-gray">编辑</span>'}</td>
+    <td data-label="状态">${a.active ? '<span class="ad-pill ad-pill-green">启用</span>' : '<span class="ad-pill ad-pill-red">停用</span>'}</td>
+    <td class="ad-cell-sub" data-label="最近登录" style="white-space:nowrap">${esc(a.last_login ? fmtTime(a.last_login) : '从未登录')}</td>
     <td>
       <div class="ad-cell-actions">
         ${a.email === user.email ? '<span class="ad-cell-sub">当前账号</span>' : `
@@ -709,27 +792,26 @@ export function adminsPage({ user, env, admins, allowList, flash }) {
 
   const children = `
     ${flash ? `<div class="ad-alert ad-alert-${esc(flash.type)}" id="adFlash" data-message="1">${esc(flash.message)}</div>` : ''}
-    <div class="ad-alert ad-alert-info">
-      首次登录的 Google 账号必须同时满足：① 邮箱在 Worker 环境变量 <code>ADMIN_EMAILS</code> 中；② 首次登录会自动写入管理员表。
-      之后可以在这里停用或删除管理员。
-    </div>
     <div class="ad-card">
-      <div class="ad-card-head"><h2>管理员账号</h2></div>
-      <div class="ad-table-wrap">
+      <div class="ad-card-head">
+        <h2>管理员账号</h2>
+        <span class="spacer"></span>
+        <!-- Whitelist lives in the card head so the table keeps the same
+             height as every other list page. -->
+        <div class="ad-head-note" title="首次登录的 Google 账号必须同时满足：① 邮箱在 Worker 环境变量 ADMIN_EMAILS 中；② 首次登录会自动写入管理员表。之后可以在这里停用或删除管理员。">
+          <span class="ad-head-note-label">白名单</span>
+          ${allowList.length
+            ? allowList.map((e) => `<span class="ad-pill ad-pill-gray">${esc(e)}</span>`).join('')
+            : '<span class="ad-pill ad-pill-red">未配置</span>'}
+        </div>
+      </div>
+      <div class="ad-table-wrap" data-fixed-table>
         <table class="ad-table">
           <thead><tr><th>账号</th><th>角色</th><th>状态</th><th>最近登录</th><th></th></tr></thead>
           <tbody>${rows || '<tr><td colspan="5"><div class="ad-empty">暂无管理员</div></td></tr>'}</tbody>
         </table>
       </div>
-    </div>
-    <div class="ad-card" style="margin-top:16px">
-      <div class="ad-card-head"><h2>白名单（ADMIN_EMAILS）</h2></div>
-      <div class="ad-card-body" style="font-size:13px;color:var(--ad-text-2)">
-        ${allowList.length ? allowList.map((e) => `<span class="ad-pill ad-pill-gray" style="margin-right:6px">${esc(e)}</span>`).join('') : '<span style="color:var(--ad-text-3)">未配置</span>'}
-        <p style="font-size:12px;color:var(--ad-text-3);margin:12px 0 0">
-          修改后需重新部署：<code>wrangler secret put …</code> 或在 wrangler.toml 的 <code>[vars]</code> 中调整 <code>ADMIN_EMAILS</code>。
-        </p>
-      </div>
+      ${tablePager({ page, pages, total, perPage, basePath: listHref('/admin/admins'), unit: '人' })}
     </div>
   `;
 
@@ -841,15 +923,17 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
 
   const children = `
     ${flash ? `<div class="ad-alert ad-alert-${esc(flash.type)}" id="adFlash" data-message="1">${esc(flash.message)}</div>` : ''}
-    <div class="ad-alert ad-alert-info">
-      访客通过前台「提交工具」表单提交的内容会先进入这里。点「收录」会把该工具直接发布到站点
-      （若同名或同链接已存在，则关联到已有工具）。
-    </div>
     <div class="ad-card">
       <div class="ad-card-head">
         <div class="ad-toolbar">${tabs}</div>
+        <span class="spacer"></span>
+        <!-- Explanation moved into the header so the table keeps the same
+             height as every other list page. -->
+        <div class="ad-head-note" title="访客通过前台「提交工具」表单提交的内容会先进入这里。点「收录」会把该工具直接发布到站点（若同名或同链接已存在，则关联到已有工具）。">
+          <span class="ad-head-note-label">收录</span>会把工具直接发布到站点
+        </div>
       </div>
-      <div class="ad-table-wrap">
+      <div class="ad-table-wrap" data-fixed-table>
         <table class="ad-table">
           <thead><tr>
             <th>工具</th><th>分类</th><th>定价</th><th>提交人</th><th>状态</th><th></th>
@@ -860,8 +944,10 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
           </td></tr>`}</tbody>
         </table>
       </div>
-      ${pages > 1 ? pager({ page, pages, q: '', category: '', status }) : ''}
-      <div class="ad-pager"><span style="border:none;padding:0;color:var(--ad-text-3)">共 ${total} 条</span></div>
+      ${tablePager({
+        page, pages, total, perPage,
+        basePath: listHref('/admin/submissions', { status }),
+      })}
     </div>
   `;
 

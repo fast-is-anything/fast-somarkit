@@ -4,14 +4,17 @@
 
 import { esc, json, redirect, getCookie, setCookie, sign, secureIfHttps } from './lib/crypto.js';
 import {
-  listCategories, countToolsByCategory, listPublishedTools, listFeaturedTools,
+  listCategories, listCategoriesPage, countToolsByCategory, listPublishedTools, listFeaturedTools,
   getToolBySlug, getTool, listToolsAdmin, createTool, updateTool, deleteTool,
   incrementVisits, getCategoryBySlug, getCategory, createCategory, updateCategory,
-  deleteCategory, slugify, logAudit, listAudit, dashboardStats, topTools,
-  importToolsCSV, listAdmins, setAdminActive, deleteAuditLog, findAdminByEmail,
+  deleteCategory, slugify, logAudit, listAudit, listAuditPage, dashboardStats, topTools,
+  importToolsCSV, listAdmins, listAdminsPage, setAdminActive, deleteAuditLog, findAdminByEmail,
+  recordClick, analyticsSummary,
   createSubmission, recentSubmissionCount, listSubmissionsAdmin, countSubmissionsByStatus,
   getSubmission, approveSubmission, rejectSubmission, deleteSubmission,
 } from './lib/db.js';
+import { sendClickToGa } from './lib/ga.js';
+import { gaDailySeries, isGaConfigured } from './lib/ga-report.js';
 import { ICONS } from './lib/icons.js';
 import { homePage, toolPage, categoryPage, aboutPage, notFoundPage, submitPage, submitSuccessPage } from './templates/public.js';
 import {
@@ -19,6 +22,7 @@ import {
   importPage, auditPage, adminsPage, loginPage,
   submissionsPage, submissionDetailPage,
 } from './templates/admin.js';
+import { analyticsPage } from './templates/analytics.js';
 import {
   beginLogin, completeLogin, currentAdmin, logout, adminAllowList, isConfigured,
   SESSION_COOKIE, redirectUri,
@@ -65,6 +69,8 @@ async function router(request, env, ctx) {
   const path = url.pathname.replace(/\/+$/, '') || '/';
   const method = request.method;
   const theme = getCookie(request, 'somarkit-theme') === 'dark' ? 'dark' : 'light';
+  // GA4 measurement id for the public pages; empty string disables the tag.
+  const gaId = String(env.GA_MEASUREMENT_ID || '').trim();
 
   // Language: explicit ?lang= wins (and is persisted via cookie); otherwise
   // fall back to the stored cookie, then the browser's Accept-Language.
@@ -92,14 +98,45 @@ async function router(request, env, ctx) {
 
   // ---------------------------------------------------------------- API ---
   if (path === '/api/track' && method === 'POST') {
-    try {
-      const body = await request.json();
-      const id = Number(body && body.id);
-      if (id > 0) {
-        ctx.waitUntil(incrementVisits(env.DB, id));
+    // CORS is unnecessary (same origin) but the beacon must never fail loudly.
+    let body = {};
+    try { body = await request.json(); } catch { /* ignore */ }
+    const id = Number(body && body.id);
+    const visitor = String((body && body.visitor) || '').slice(0, 64);
+    if (!(id > 0)) return new Response(null, { status: 204 });
+
+    const tool = await getTool(env.DB, id);
+    if (!tool) return new Response(null, { status: 204 });
+
+    const [ipHash, country] = await Promise.all([
+      hashIp(request, env),
+      Promise.resolve(request.headers.get('cf-ipcountry') || ''),
+    ]);
+
+    ctx.waitUntil((async () => {
+      try {
+        const result = await recordClick(env.DB, {
+          toolId: id,
+          ipHash,
+          visitor,
+          country,
+          referer: request.headers.get('referer') || '',
+          path: String((body && body.path) || ''),
+        });
+        // Only mirror clicks we actually recorded, so both stores agree.
+        if (result.recorded) {
+          await sendClickToGa(env, { visitor, tool, country, referer: request.headers.get('referer') || '', path: String((body && body.path) || '') });
+        }
+      } catch (err) {
+        console.error('track failed', err && err.stack || err);
       }
-    } catch { /* ignore */ }
-    return new Response(null, { status: 204 });
+    })());
+
+    // Echo the visitor id so the client can persist it for later clicks.
+    return new Response(JSON.stringify({ ok: true, visitor }), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+    });
   }
 
   if (path === '/api/search' && method === 'GET') {
@@ -124,7 +161,7 @@ async function router(request, env, ctx) {
 
   // ------------------------------------------------------- public routes ---
   if (path === '/' || path === '/index.html') {
-    return withLang(await renderHome(request, env, theme, lang));
+    return withLang(await renderHome(request, env, theme, lang, gaId));
   }
   if (path === '/about') {
     const [categories, counts, tools] = await Promise.all([
@@ -132,7 +169,7 @@ async function router(request, env, ctx) {
       countToolsByCategory(env.DB),
       listPublishedTools(env.DB),
     ]);
-    return withLang(aboutPage({ categories, counts, total: tools.length, theme, lang }));
+    return withLang(aboutPage({ categories, counts, total: tools.length, theme, lang, gaId }));
   }
 
   // ------------------------------------------------------ submit a tool ---
@@ -143,10 +180,10 @@ async function router(request, env, ctx) {
         countToolsByCategory(env.DB),
         listPublishedTools(env.DB),
       ]);
-      return withLang(submitPage({ categories, counts, total: tools.length, theme, lang }));
+      return withLang(submitPage({ categories, counts, total: tools.length, theme, lang, gaId }));
     }
     if (method === 'POST') {
-      return withLang(await handleSubmit(request, env, theme, lang));
+      return withLang(await handleSubmit(request, env, theme, lang, gaId));
     }
   }
   if (path === '/submit/thanks') {
@@ -155,7 +192,7 @@ async function router(request, env, ctx) {
       countToolsByCategory(env.DB),
       listPublishedTools(env.DB),
     ]);
-    return withLang(submitSuccessPage({ categories, counts, total: tools.length, theme, lang }));
+    return withLang(submitSuccessPage({ categories, counts, total: tools.length, theme, lang, gaId }));
   }
 
   if (path.startsWith('/tools/')) {
@@ -174,7 +211,7 @@ async function router(request, env, ctx) {
         : related.concat(allTools.filter((x) => x.id !== tool.id && x.category_id !== tool.category_id)).slice(0, 6);
       return withLang(toolPage({
         tool, categories, counts, related: fallback,
-        total: allTools.length, theme, lang,
+        total: allTools.length, theme, lang, gaId,
       }));
     }
   }
@@ -241,12 +278,12 @@ async function router(request, env, ctx) {
     countToolsByCategory(env.DB),
     listPublishedTools(env.DB),
   ]);
-  return withLang(notFoundPage({ categories, counts, total: tools.length, theme, lang }));
+  return withLang(notFoundPage({ categories, counts, total: tools.length, theme, lang, gaId }));
 }
 
 // --- public render ----------------------------------------------------------
 
-async function renderHome(request, env, theme, lang = 'zh') {
+async function renderHome(request, env, theme, lang = 'zh', gaId = '') {
   const [categories, counts, tools, featured] = await Promise.all([
     listCategories(env.DB),
     countToolsByCategory(env.DB),
@@ -258,7 +295,7 @@ async function renderHome(request, env, theme, lang = 'zh') {
     categories, counts, tools, featured,
     total: tools.length,
     catCount: categories.length,
-    theme, lang,
+    theme, lang, gaId,
   });
   // Cache policy is set centrally in withLang(); only the edge TTL is widened
   // here because the home listing is the hottest page.
@@ -286,7 +323,7 @@ function sitemap(categories, tools) {
 
 // --- public: submit a tool --------------------------------------------------
 
-async function handleSubmit(request, env, theme, lang) {
+async function handleSubmit(request, env, theme, lang, gaId) {
   let form;
   try {
     form = await request.formData();
@@ -314,7 +351,7 @@ async function handleSubmit(request, env, theme, lang) {
       listPublishedTools(env.DB),
     ]);
     return submitPage({
-      categories, counts, total: tools.length, theme, lang,
+      categories, counts, total: tools.length, theme, lang, gaId,
       error: msg, values,
     });
   };
@@ -452,14 +489,22 @@ function html(body, status = 200) {
   });
 }
 
+/** Rows per page for the admin tables; clamped so a crafted URL can't ask for 100k. */
+const PER_PAGE_OPTIONS = [10, 20, 50, 100];
+function parsePerPage(url, fallback = 20) {
+  const n = Number(url.searchParams.get('perPage'));
+  return PER_PAGE_OPTIONS.includes(n) ? n : fallback;
+}
+
 async function adminGet(env, ctx, request, path, url, user) {
   const flash = readFlash(url);
 
   if (path === '/admin') {
+    // Dashboard cards: 最近更新 shows the latest 10 edits, 访问排行 the top 10.
     const [stats, top, recent, categories, audit] = await Promise.all([
       dashboardStats(env.DB),
-      topTools(env.DB, 8),
-      listToolsAdmin(env.DB, { perPage: 6 }).then((r) => r.tools),
+      topTools(env.DB, 10),
+      listToolsAdmin(env.DB, { perPage: 10 }).then((r) => r.tools),
       listCategories(env.DB, { includeHidden: true }),
       listAudit(env.DB, 8),
     ]);
@@ -471,16 +516,17 @@ async function adminGet(env, ctx, request, path, url, user) {
     const q = url.searchParams.get('q') || '';
     const category = url.searchParams.get('category') || '';
     const status = url.searchParams.get('status') || '';
+    const sort = url.searchParams.get('sort') || 'updated';
     const page = Math.max(1, Number(url.searchParams.get('page') || 1));
-    const perPage = 20;
+    const perPage = parsePerPage(url);
     const [data, categories] = await Promise.all([
-      listToolsAdmin(env.DB, { q, category, status, page, perPage }),
+      listToolsAdmin(env.DB, { q, category, status, sort, page, perPage }),
       listCategories(env.DB, { includeHidden: true }),
     ]);
     const pages = Math.max(1, Math.ceil(data.total / perPage));
     return html(toolsPage({
       user, env, tools: data.tools, total: data.total, page, perPage, pages,
-      q, category, status, categories, flash,
+      q, category, status, sort, categories, flash,
     }));
   }
 
@@ -501,11 +547,17 @@ async function adminGet(env, ctx, request, path, url, user) {
 
   // categories
   if (path === '/admin/categories') {
-    const [categories, counts] = await Promise.all([
-      listCategories(env.DB, { includeHidden: true }),
+    const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+    const perPage = parsePerPage(url);
+    const [data, counts] = await Promise.all([
+      listCategoriesPage(env.DB, { includeHidden: true, page, perPage }),
       countToolsByCategory(env.DB, { includeUnpublished: true }),
     ]);
-    return html(categoriesPage({ user, env, categories, counts, flash }));
+    const pages = Math.max(1, Math.ceil(data.total / perPage));
+    return html(categoriesPage({
+      user, env, categories: data.categories, counts, total: data.total,
+      page, perPage, pages, flash,
+    }));
   }
   if (path === '/admin/categories/new') {
     return html(categoryFormPage({
@@ -525,7 +577,7 @@ async function adminGet(env, ctx, request, path, url, user) {
   if (path === '/admin/submissions') {
     const status = url.searchParams.get('status') || '';
     const page = Math.max(1, Number(url.searchParams.get('page') || 1));
-    const perPage = 20;
+    const perPage = parsePerPage(url);
     const [data, counts] = await Promise.all([
       listSubmissionsAdmin(env.DB, { status, page, perPage }),
       countSubmissionsByStatus(env.DB),
@@ -551,16 +603,44 @@ async function adminGet(env, ctx, request, path, url, user) {
     return html(importPage({ user, env, flash, csvTemplate: CSV_TEMPLATE }));
   }
 
+  // analytics — click statistics dashboard
+  if (path === '/admin/analytics') {
+    const days = [7, 30, 90].includes(Number(url.searchParams.get('days')))
+      ? Number(url.searchParams.get('days'))
+      : 30;
+    const [data, ga] = await Promise.all([
+      analyticsSummary(env.DB, { days }),
+      gaDailySeries(env, { days }),
+    ]);
+    return html(analyticsPage({
+      user, env, data, days, flash, ga,
+      gaConfigured: isGaConfigured(env),
+    }));
+  }
+
   // audit
   if (path === '/admin/audit') {
-    const entries = await listAudit(env.DB, 200);
-    return html(auditPage({ user, env, entries, flash }));
+    const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+    const perPage = parsePerPage(url);
+    const actor = url.searchParams.get('actor') || '';
+    const data = await listAuditPage(env.DB, { page, perPage, actor });
+    const pages = Math.max(1, Math.ceil(data.total / perPage));
+    return html(auditPage({
+      user, env, entries: data.entries, total: data.total,
+      page, perPage, pages, actor, flash,
+    }));
   }
 
   // admins
   if (path === '/admin/admins') {
-    const admins = await listAdmins(env.DB);
-    return html(adminsPage({ user, env, admins, allowList: adminAllowList(env), flash }));
+    const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+    const perPage = parsePerPage(url);
+    const data = await listAdminsPage(env.DB, { page, perPage });
+    const pages = Math.max(1, Math.ceil(data.total / perPage));
+    return html(adminsPage({
+      user, env, admins: data.admins, allowList: adminAllowList(env),
+      total: data.total, page, perPage, pages, flash,
+    }));
   }
 
   return redirect('/admin?err=' + encodeURIComponent('页面不存在'));

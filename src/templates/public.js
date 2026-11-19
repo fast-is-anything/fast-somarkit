@@ -58,7 +58,7 @@ function langSwitcher(lang, { mobile = false } = {}) {
   </div>`;
 }
 
-function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [], theme = 'light', lang = 'zh' }) {
+function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [], theme = 'light', lang = 'zh', gaId = '' }) {
   const htmlLang = normalizeLang(lang) === 'en' ? 'en' : 'zh-CN';
   const ogLocale = normalizeLang(lang) === 'en' ? 'en_US' : 'zh_CN';
   return `<!DOCTYPE html>
@@ -98,6 +98,13 @@ if(t!=='dark'&&t!=='light'){t=window.matchMedia('(prefers-color-scheme: dark)').
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
 ${jsonLd.map((j) => `<script type="application/ld+json">${JSON.stringify(j)}</script>`).join('\n')}
+${gaId ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${esc(gaId)}"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', ${JSON.stringify(gaId)}, { send_page_view: true });
+</script>` : ''}
 </head>`;
 }
 
@@ -363,8 +370,8 @@ function footer(year, lang = 'zh') {
   </footer>`;
 }
 
-function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = 'zh', mode = 'subset', initialVisibleCount = null }) {
-  return `${head({ title, description, canonical, jsonLd, theme, lang })}
+function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = 'zh', gaId = '', mode = 'subset', initialVisibleCount = null }) {
+  return `${head({ title, description, canonical, jsonLd, theme, lang, gaId })}
 <body>
 <noscript><div style="text-align:center;padding:1rem;background:#FEF2F2;color:#991B1B">本站需要启用 JavaScript 才能使用搜索与筛选功能。</div></noscript>
 <a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
@@ -410,7 +417,7 @@ function groupByCategory(categories, tools) {
 
 // --- pages ------------------------------------------------------------------
 
-export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = 'zh' }) {
+export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = 'zh', gaId = '' }) {
   const groups = groupByCategory(categories, tools);
   const siteDesc = t(lang, 'seo.siteDesc');
   const jsonLd = [
@@ -457,7 +464,7 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
       canonical: 'https://somarkit.com/',
       jsonLd,
       categories, counts, groups, total, featured,
-      activeSlug: 'all', theme, lang,
+      activeSlug: 'all', theme, lang, gaId,
       // The home page renders the whole catalogue, so the rail can filter
       // client-side. Category pages only hold a subset and must navigate.
       mode: 'all',
@@ -466,7 +473,7 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
   );
 }
 
-export function toolPage({ tool, categories, counts, related, total, theme, lang = 'zh' }) {
+export function toolPage({ tool, categories, counts, related, total, theme, lang = 'zh', gaId = '' }) {
   const siteDesc = t(lang, 'seo.siteDesc');
   const catName = tool.category_name || t(lang, 'detail.uncategorized');
   const jsonLd = [
@@ -501,6 +508,7 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
     jsonLd,
     theme,
     lang,
+    gaId,
   })}
 <body>
 <a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
@@ -525,14 +533,14 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
           </h1>
           <div class="detail-meta">
             <span class="pricing-tag pricing-${esc(tool.pricing)}">${esc(pricingLabel(lang, tool.pricing))}</span>
-            <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(hostOf(tool.url))}</a>
+              <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow" class="tool-visit-btn" data-tool-id="${tool.id}">${esc(hostOf(tool.url))}</a>
             <span class="detail-meta-item">${esc(catName)}</span>
             <span class="detail-meta-item">${esc(t(lang, 'detail.visits', tool.visit_count))}</span>
           </div>
         </div>
         <div class="detail-body">${esc(tool.description || t(lang, 'card.noDesc'))}</div>
         ${tags ? `<div class="tool-tags" style="margin-bottom:24px">${tags}</div>` : ''}
-        <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow" class="nav-btn nav-btn-primary"
+        <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow" class="nav-btn nav-btn-primary tool-visit-btn"
           style="height:42px;padding:0 20px;font-size:var(--text-sm)" data-tool-id="${tool.id}">
           ${esc(t(lang, 'detail.visitSite'))} ${UI.externalLink}
         </a>
@@ -550,7 +558,7 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = 'zh' }) {
+export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = 'zh', gaId = '' }) {
   // Ship every category (not just this one) so switching to another category
   // can be handled client-side, exactly like on the home page.
   const groups = groupByCategory(categories, allTools || tools);
@@ -572,7 +580,7 @@ export function categoryPage({ category, categories, counts, tools, allTools, fe
       canonical: `https://somarkit.com/${category.slug}`,
       jsonLd,
       categories, counts, groups, total, featured,
-      activeSlug: category.slug, theme, lang,
+      activeSlug: category.slug, theme, lang, gaId,
       // Full catalogue present → client-side switching, same as home.
       mode: 'all',
       initialVisibleCount: tools.length,
@@ -581,7 +589,7 @@ export function categoryPage({ category, categories, counts, tools, allTools, fe
   );
 }
 
-export function aboutPage({ categories, counts, total, theme, lang = 'zh' }) {
+export function aboutPage({ categories, counts, total, theme, lang = 'zh', gaId = '' }) {
   const isEn = normalizeLang(lang) === 'en';
   const body = `${head({
     title: isEn ? 'About SoMarkIt — AI Tool Directory' : '关于 SoMarkIt — AI 工具导航',
@@ -590,6 +598,7 @@ export function aboutPage({ categories, counts, total, theme, lang = 'zh' }) {
     jsonLd: [],
     theme,
     lang,
+    gaId,
   })}
 <body>
 <div class="app-layout">
@@ -634,10 +643,10 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function notFoundPage({ categories, counts, total, theme, lang = 'zh' }) {
+export function notFoundPage({ categories, counts, total, theme, lang = 'zh', gaId = '' }) {
   const isEn = normalizeLang(lang) === 'en';
   return new Response(
-    `${head({ title: isEn ? 'Page not found | SoMarkIt' : '页面不存在 | SoMarkIt', description: t(lang, 'seo.siteDesc'), theme, lang })}
+    `${head({ title: isEn ? 'Page not found | SoMarkIt' : '页面不存在 | SoMarkIt', description: t(lang, 'seo.siteDesc'), theme, lang, gaId })}
 <body>
 <div class="app-layout">
   ${sidebar({ categories, counts, activeSlug: 'all', total, lang })}
@@ -660,7 +669,7 @@ ${pageLoader()}
 
 // --- submit a tool ----------------------------------------------------------
 
-export function submitPage({ categories, counts, total, theme, lang = 'zh', error = '', values = {} }) {
+export function submitPage({ categories, counts, total, theme, lang = 'zh', gaId = '', error = '', values = {} }) {
   const isEn = normalizeLang(lang) === 'en';
   const v = values || {};
 
@@ -681,6 +690,7 @@ export function submitPage({ categories, counts, total, theme, lang = 'zh', erro
     jsonLd: [],
     theme,
     lang,
+    gaId,
   })}
 <body>
 <a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
@@ -776,7 +786,7 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function submitSuccessPage({ categories, counts, total, theme, lang = 'zh' }) {
+export function submitSuccessPage({ categories, counts, total, theme, lang = 'zh', gaId = '' }) {
   const body = `${head({
     title: `${t(lang, 'submit.successTitle')} — SoMarkIt`,
     description: t(lang, 'submit.successBody'),
@@ -784,6 +794,7 @@ export function submitSuccessPage({ categories, counts, total, theme, lang = 'zh
     jsonLd: [],
     theme,
     lang,
+    gaId,
   })}
 <body>
 <div class="app-layout">
