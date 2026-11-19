@@ -786,15 +786,16 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   min-width: 0;
 }
 
-/* Feature card: solid brand colour, big icon, label pills. */
+/* Feature card: solid brand colour, label pills. Text-only by design — the
+   logo lives on the product cards below, so these stay a name-first rail. */
 .hero-agent-card {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    "icon  head  badge"
-    "icon  desc  desc"
-    "icon  tags  tags";
+    "head  badge"
+    "desc  desc"
+    "tags  tags";
   column-gap: 14px;
   row-gap: 4px;
   align-items: start;
@@ -807,18 +808,6 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 .hero-agent-card:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(15, 23, 42, .18); }
-
-.hero-agent-logo {
-  grid-area: icon;
-  width: 40px; height: 40px; border-radius: 10px;
-  display: grid; place-items: center;
-  background: rgba(255, 255, 255, .2);
-  font-size: 14px; font-weight: 800;
-  color: #fff;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.hero-agent-logo img { width: 100%; height: 100%; object-fit: cover; }
 
 .hero-agent-head {
   grid-area: head;
@@ -950,12 +939,42 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 }
 .tool-card:hover { border-color: var(--text-tertiary); }
 
-/* Title row: name + inline badges, nothing else. */
+/* Title row: logo tile + name + inline badges, nothing else.
+   Centre the two columns so the product name sits on the logo's optical
+   middle; `flex-start` would leave a single-line name riding high. */
 .tool-card-header {
-  display: flex; align-items: flex-start; gap: 8px;
+  display: flex; align-items: center; gap: 10px;
   margin-bottom: 8px;
 }
 .tool-info { min-width: 0; flex: 1; }
+
+/* Product logo. A fixed square keeps the card grid aligned whether a tool
+   ships a square app icon or a wide wordmark — the image is letterboxed with
+   `contain` instead of being cropped, so neither shape loses pixels. */
+.logo-tile {
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-weight: 700;
+  letter-spacing: 0;
+  user-select: none;
+  /* White-backed logos (very common) must not float on dark cards. */
+  box-shadow: inset 0 0 0 1px var(--border-color-light);
+}
+.logo-tile img { width: 100%; height: 100%; object-fit: contain; }
+.logo-text { line-height: 1; }
+
+.tool-card-logo {
+  width: 40px; height: 40px;
+  margin-top: 1px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+}
+/* Breathing room so a square icon doesn't sit flush against the tint. */
+.tool-card-logo img { padding: 3px; }
+
 .tool-name {
   margin: 0;
   font-size: var(--text-lg);
@@ -1090,9 +1109,90 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 }
 
 /* --------------------------------------------------------------------------
-   Tool info row — a compact strip of key facts (category / pricing / tags /
-   website) between the detail card and the related-tools grid.
+   Editorial review body (Markdown), rendered between the product card and the
+   key-facts row.
    -------------------------------------------------------------------------- */
+.detail-review {
+  margin-top: 20px;
+  padding: 26px 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  font-size: var(--text-base);
+  line-height: 1.85;
+  color: var(--text-secondary);
+  /* Long URLs / code never widen the column. */
+  overflow-wrap: break-word;
+}
+.detail-review > :first-child { margin-top: 0; }
+.detail-review > :last-child { margin-bottom: 0; }
+.detail-review h2,
+.detail-review h3,
+.detail-review h4,
+.detail-review h5,
+.detail-review h6 {
+  color: var(--text-primary);
+  line-height: 1.35;
+  letter-spacing: -.01em;
+}
+.detail-review h2 { font-size: 1.25rem; margin: 28px 0 12px; }
+.detail-review h3 { font-size: 1.0625rem; margin: 24px 0 10px; }
+.detail-review h4,
+.detail-review h5,
+.detail-review h6 { font-size: var(--text-base); margin: 20px 0 8px; }
+.detail-review p { margin: 0 0 14px; }
+.detail-review ul,
+.detail-review ol { margin: 0 0 14px; padding-left: 1.4em; }
+.detail-review li { margin-bottom: 6px; }
+.detail-review li > ul,
+.detail-review li > ol { margin-top: 6px; }
+.detail-review a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.detail-review a:hover { color: var(--text-primary); }
+.detail-review strong { color: var(--text-primary); font-weight: 600; }
+.detail-review code {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .9em;
+  color: var(--text-primary);
+}
+.detail-review pre {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  overflow-x: auto;
+  line-height: 1.65;
+}
+.detail-review pre code { padding: 0; background: none; font-size: .875rem; }
+.detail-review blockquote {
+  margin: 0 0 16px;
+  padding: 4px 0 4px 16px;
+  border-left: 3px solid var(--accent);
+  color: var(--text-tertiary);
+}
+.detail-review blockquote > :last-child { margin-bottom: 0; }
+.detail-review hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 24px 0;
+}
+.detail-review img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  margin: 8px 0 16px;
+}
+.md-table-wrap { overflow-x: auto; margin: 0 0 16px; }
+.detail-review table { border-collapse: collapse; width: 100%; font-size: var(--text-sm); }
+.detail-review th,
+.detail-review td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  text-align: left;
+}
+.detail-review th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
 .tool-info-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1160,7 +1260,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   font-size: 22px; font-weight: 700; color: var(--text-secondary); overflow: hidden;
   align-self: center;
 }
-.detail-logo img { width: 100%; height: 100%; object-fit: cover; }
+.detail-logo img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
 .detail-title {
   grid-area: title;
   margin: 0; font-size: var(--text-2xl); letter-spacing: -.02em;
@@ -1433,4 +1533,6 @@ select.form-input:focus { background-color: var(--bg-primary); }
   .mobile-header-actions { gap: 2px; }
   .mobile-header-actions .nav-btn { padding: 0 6px; }
   .lang-toggle > svg:first-child { display: none; }
+  /* A 40px tile would eat a third of the title line at this width. */
+  .tool-card-logo { width: 34px; height: 34px; font-size: 12px; }
 }

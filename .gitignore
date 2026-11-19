@@ -2,7 +2,8 @@ node_modules/
 .wrangler/
 .dev.vars
 .shots/
-.research/
+.research/*
+!.research/*.md
 dist/
 *.log
 .DS_Store

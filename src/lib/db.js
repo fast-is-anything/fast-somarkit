@@ -72,8 +72,8 @@ export async function getCategory(db, id) {
 export async function createCategory(db, data) {
   const { meta } = await db
     .prepare(
-      `INSERT INTO categories (slug, name, name_en, icon, description, sort_order, visible, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO categories (slug, name, name_en, icon, description, description_en, sort_order, visible, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       data.slug,
@@ -81,6 +81,7 @@ export async function createCategory(db, data) {
       data.name_en || '',
       data.icon || 'grid',
       data.description || '',
+      data.description_en || '',
       Number(data.sort_order) || 0,
       data.visible ? 1 : 0,
       now()
@@ -92,7 +93,7 @@ export async function createCategory(db, data) {
 export async function updateCategory(db, id, data) {
   await db
     .prepare(
-      `UPDATE categories SET slug=?, name=?, name_en=?, icon=?, description=?,
+      `UPDATE categories SET slug=?, name=?, name_en=?, icon=?, description=?, description_en=?,
         sort_order=?, visible=?, updated_at=? WHERE id=?`
     )
     .bind(
@@ -101,6 +102,7 @@ export async function updateCategory(db, id, data) {
       data.name_en || '',
       data.icon || 'grid',
       data.description || '',
+      data.description_en || '',
       Number(data.sort_order) || 0,
       data.visible ? 1 : 0,
       now(),
@@ -148,6 +150,46 @@ export async function listFeaturedTools(db, limit = 6) {
     .bind(limit)
     .all();
   return (results || []).map(rowToTool);
+}
+
+/**
+ * Home-page "trending" rail: the most-clicked published tools over the last
+ * `days` days, straight from click_events (not the visit_count cache, so the
+ * window is real).
+ *
+ * Falls back to the editorial featured list when there are not enough clicks
+ * yet — a brand-new site must not render an empty hero.
+ */
+export async function listTrendingTools(db, { limit = 2, days = 30 } = {}) {
+  const since = `-${Math.max(1, days - 1)} days`;
+  const { results } = await db
+    .prepare(
+      `SELECT t.*, c.name AS category_name, c.slug AS category_slug,
+              COUNT(e.id) AS window_clicks,
+              COUNT(DISTINCT e.visitor) AS window_visitors
+       FROM click_events e
+       JOIN tools t ON t.id = e.tool_id
+       LEFT JOIN categories c ON c.id = t.category_id
+       WHERE e.created_at >= datetime('now', ?)
+         AND t.status = 'published'
+       GROUP BY t.id
+       ORDER BY window_clicks DESC, window_visitors DESC, t.id DESC
+       LIMIT ?`
+    )
+    .bind(since, limit)
+    .all();
+
+  const trending = (results || []).map(rowToTool);
+  if (trending.length >= limit) return trending;
+
+  // Pad with editorial picks, skipping anything already present.
+  const seen = new Set(trending.map((t) => t.id));
+  const fallback = await listFeaturedTools(db, limit * 3 + 2);
+  for (const t of fallback) {
+    if (trending.length >= limit) break;
+    if (!seen.has(t.id)) { trending.push(t); seen.add(t.id); }
+  }
+  return trending.slice(0, limit);
 }
 
 export async function getToolBySlug(db, slug) {
@@ -213,8 +255,10 @@ export async function createTool(db, data) {
     .prepare(
       `INSERT INTO tools
         (slug, name, url, description, category_id, tags, pricing, logo_url,
-         is_hot, is_new, is_featured, status, sort_order, source, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         is_hot, is_new, is_featured, status, sort_order,
+         name_en, description_en, tags_en,
+         review_md, review_md_en, source, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       data.slug,
@@ -230,6 +274,11 @@ export async function createTool(db, data) {
       data.is_featured ? 1 : 0,
       data.status || 'published',
       Number(data.sort_order) || 0,
+      data.name_en || '',
+      data.description_en || '',
+      data.tags_en || '',
+      data.review_md || '',
+      data.review_md_en || '',
       data.source || '',
       now()
     )
@@ -242,7 +291,9 @@ export async function updateTool(db, id, data) {
     .prepare(
       `UPDATE tools SET slug=?, name=?, url=?, description=?, category_id=?, tags=?,
         pricing=?, logo_url=?, is_hot=?, is_new=?, is_featured=?, status=?,
-        sort_order=?, updated_at=? WHERE id=?`
+        sort_order=?,
+        name_en=?, description_en=?, tags_en=?,
+        review_md=?, review_md_en=?, updated_at=? WHERE id=?`
     )
     .bind(
       data.slug,
@@ -258,6 +309,11 @@ export async function updateTool(db, id, data) {
       data.is_featured ? 1 : 0,
       data.status || 'published',
       Number(data.sort_order) || 0,
+      data.name_en || '',
+      data.description_en || '',
+      data.tags_en || '',
+      data.review_md || '',
+      data.review_md_en || '',
       now(),
       id
     )
@@ -706,113 +762,3 @@ export async function topTools(db, limit = 8) {
   return (results || []).map(rowToTool);
 }
 
-// --- bulk import ------------------------------------------------------------
-
-/**
- * Parse CSV in a forgiving way: supports quoted fields with embedded commas
- * and newlines.
- */
-export function parseCSV(text) {
-  const rows = [];
-  let row = [];
-  let field = '';
-  let i = 0;
-  let inQuotes = false;
-
-  while (i < text.length) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
-        inQuotes = false; i++; continue;
-      }
-      field += ch; i++; continue;
-    }
-    if (ch === '"') { inQuotes = true; i++; continue; }
-    if (ch === ',') { row.push(field); field = ''; i++; continue; }
-    if (ch === '\r') { i++; continue; }
-    if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
-    field += ch; i++;
-  }
-  if (field.length || row.length) { row.push(field); rows.push(row); }
-  return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
-}
-
-/**
- * Bulk upsert tools from CSV rows.
- * Expected headers: name,url,category,tags,description,pricing,hot,new,featured
- */
-export async function importToolsCSV(db, csvText) {
-  const rows = parseCSV(csvText);
-  if (!rows.length) return { inserted: 0, updated: 0, skipped: 0, errors: ['CSV 为空'] };
-
-  const headers = rows[0].map((h) => h.trim().toLowerCase());
-  const idx = (k) => headers.indexOf(k);
-
-  const cats = await listCategories(db, { includeHidden: true });
-  const catByName = {};
-  const catBySlug = {};
-  for (const c of cats) {
-    catByName[c.name] = c.id;
-    catBySlug[c.slug] = c.id;
-  }
-
-  let inserted = 0, updated = 0, skipped = 0;
-  const errors = [];
-
-  for (let r = 1; r < rows.length; r++) {
-    const line = rows[r];
-    const get = (k) => (idx(k) >= 0 ? String(line[idx(k)] ?? '').trim() : '');
-    const name = get('name');
-    const url = get('url');
-    if (!name || !url) { skipped++; if (errors.length < 6) errors.push(`第 ${r + 1} 行缺少 name 或 url`); continue; }
-
-    const catRaw = get('category');
-    const category_id = catByName[catRaw] || catBySlug[catRaw] || null;
-    const tags = get('tags');
-    const pricingRaw = (get('pricing') || 'free').toLowerCase();
-    const pricing = ['free', 'freemium', 'paid', 'opensource'].includes(pricingRaw) ? pricingRaw : 'free';
-    const bool = (v) => ['1', 'true', 'yes', 'y', '是', '热门', '新品'].includes(String(v).toLowerCase());
-
-    const payload = {
-      name,
-      url,
-      description: get('description'),
-      category_id,
-      tags,
-      pricing,
-      logo_url: get('logo') || get('logo_url'),
-      is_hot: bool(get('hot')),
-      is_new: bool(get('new')),
-      is_featured: bool(get('featured')),
-      status: 'published',
-      sort_order: Number(get('sort')) || 0,
-      source: 'csv-import',
-    };
-
-    const existing = await db
-      .prepare('SELECT id FROM tools WHERE url = ? OR name = ? LIMIT 1')
-      .bind(url, name)
-      .first();
-
-    try {
-      if (existing) {
-        // keep the original slug so URLs stay stable
-        const cur = await db.prepare('SELECT slug FROM tools WHERE id = ?').bind(existing.id).first();
-        await updateTool(db, existing.id, { ...payload, slug: cur.slug });
-        updated++;
-      } else {
-        let slug = slugify(name);
-        const clash = await db.prepare('SELECT id FROM tools WHERE slug = ?').bind(slug).first();
-        if (clash) slug = `${slug}-${r}`;
-        await createTool(db, { ...payload, slug });
-        inserted++;
-      }
-    } catch (e) {
-      skipped++;
-      if (errors.length < 6) errors.push(`第 ${r + 1} 行：${e.message}`);
-    }
-  }
-
-  return { inserted, updated, skipped, errors };
-}

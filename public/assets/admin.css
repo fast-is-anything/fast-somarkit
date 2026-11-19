@@ -750,6 +750,168 @@ table.ad-table {
 
 /* pagination styles live in the "Pager" block above */
 
+/* --------------------------------------------------- markdown editor --- */
+/* The form shows a 10-line source excerpt; the real editing surface is a
+   full-screen overlay so long reviews get the room they need. */
+.ad-md-preview {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--ad-surface-2);
+  border: 1px solid var(--ad-border-soft);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--ad-text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ad-md-preview.is-empty { color: var(--ad-text-3); font-style: italic; }
+.ad-md-hint { font-size: 11.5px; color: var(--ad-text-3); }
+.ad-md-count { font-size: 12px; color: var(--ad-text-3); font-variant-numeric: tabular-nums; }
+/* Per-language summary rows on the tool form. */
+.ad-md-lang-row { display: flex; align-items: baseline; gap: 8px; }
+/* Bilingual text inputs: Chinese and English side by side, so an empty
+   translation is immediately visible. */
+.ad-i18n-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.ad-i18n-pair-col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.ad-i18n-pair .ad-textarea { min-height: 96px; }
+@media (max-width: 900px) {
+  /* Side by side is too cramped on narrow screens; stack instead. */
+  .ad-i18n-pair, .ad-i18n-pair-col { grid-template-columns: 1fr; }
+}
+.ad-md-lang-tag {
+  flex-shrink: 0;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .04em;
+  padding: 2px 7px; border-radius: 5px;
+  background: var(--ad-surface-2); color: var(--ad-text-2);
+  border: 1px solid var(--ad-border-soft);
+}
+/* Language tabs inside the full-screen editor. */
+.ad-md-tabs { display: flex; gap: 4px; }
+.ad-md-tab {
+  height: 28px; padding: 0 12px;
+  border-radius: 7px; border: 1px solid var(--ad-border);
+  background: transparent; color: var(--ad-text-2);
+  font-size: 12.5px; font-weight: 500; font-family: inherit;
+  cursor: pointer; transition: all .15s ease;
+}
+.ad-md-tab:hover { background: var(--ad-surface-2); color: var(--ad-text); }
+.ad-md-tab.is-active {
+  background: var(--ad-primary); border-color: var(--ad-primary); color: #fff;
+}
+
+.ad-mdeditor {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  background: var(--ad-bg);
+}
+.ad-mdeditor[hidden] { display: none; }
+body.md-editing { overflow: hidden; }
+.ad-mdeditor-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--ad-border);
+  background: var(--ad-surface);
+}
+.ad-mdeditor-head h2 { margin: 0; font-size: 14px; font-weight: 650; }
+.ad-mdeditor-head .spacer { flex: 1; }
+.ad-mdeditor-main {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+}
+.ad-mdeditor-input {
+  width: 100%; height: 100%;
+  padding: 20px 22px;
+  border: none;
+  border-right: 1px solid var(--ad-border);
+  background: var(--ad-surface);
+  color: var(--ad-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.8;
+  resize: none;
+  outline: none;
+  tab-size: 2;
+}
+.ad-mdeditor-input::placeholder { color: var(--ad-text-3); }
+.ad-mdeditor-preview {
+  overflow: auto;
+  padding: 20px 24px;
+  background: var(--ad-surface-2);
+  color: var(--ad-text-2);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.ad-mdeditor-preview h2 { font-size: 18px; margin: 20px 0 10px; color: var(--ad-text); }
+.ad-mdeditor-preview h3 { font-size: 15px; margin: 16px 0 8px; color: var(--ad-text); }
+.ad-mdeditor-preview h4,
+.ad-mdeditor-preview h5,
+.ad-mdeditor-preview h6 { font-size: 14px; margin: 14px 0 6px; color: var(--ad-text); }
+.ad-mdeditor-preview p { margin: 0 0 10px; }
+.ad-mdeditor-preview li { margin-left: 20px; }
+.ad-mdeditor-preview blockquote {
+  margin: 10px 0; padding: 6px 14px;
+  border-left: 3px solid var(--ad-primary);
+  color: var(--ad-text-3);
+}
+.ad-mdeditor-preview code {
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--ad-surface); border: 1px solid var(--ad-border-soft);
+  font-size: 12.5px;
+}
+.ad-mdeditor-preview hr { border: none; border-top: 1px solid var(--ad-border); margin: 16px 0; }
+.ad-mdeditor-preview .is-empty { color: var(--ad-text-3); font-style: italic; }
+
+/* Bottom action bar of the full-screen editor. */
+.ad-mdeditor-foot {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--ad-border);
+  background: var(--ad-surface);
+}
+.ad-mdeditor-foot .spacer { flex: 1; }
+.ad-mdeditor-input.is-dragover {
+  outline: 2px dashed var(--ad-primary);
+  outline-offset: -8px;
+  background: var(--ad-primary-soft);
+}
+
+/* Logo picker in the tool form. */
+.ad-logo-field { display: flex; align-items: center; gap: 14px; }
+.ad-logo-preview {
+  width: 64px; height: 64px; flex-shrink: 0;
+  border-radius: 12px;
+  border: 1px solid var(--ad-border);
+  background: var(--ad-surface-2);
+  display: grid; place-items: center;
+  overflow: hidden;
+}
+.ad-logo-preview img { width: 100%; height: 100%; object-fit: contain; }
+.ad-logo-initial {
+  font-size: 22px; font-weight: 700; color: var(--ad-text-3);
+  letter-spacing: -.02em;
+}
+.ad-logo-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+/* <label class="ad-btn"> acting as a file picker button. */
+.ad-logo-actions label.ad-btn { cursor: pointer; }
+
+@media (max-width: 900px) {
+  /* Stack editor over preview on narrow screens. */
+  .ad-mdeditor-main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .ad-mdeditor-input { border-right: none; border-bottom: 1px solid var(--ad-border); }
+  .ad-mdeditor-head .ad-md-hint { display: none; }
+}
+
 /* ------------------------------------------------------ analytics page */
 .an-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 .an-note { font-size: 12px; color: var(--ad-text-3); white-space: nowrap; }

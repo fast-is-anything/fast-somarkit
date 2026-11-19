@@ -6,6 +6,7 @@ import { esc } from '../lib/crypto.js';
 import { UI } from '../lib/icons.js';
 import { logoGlyph } from '../lib/logo.js';
 import { PRICING, TOOL_STATUS } from '../lib/db.js';
+import { ACCEPT_ATTR, MAX_LABEL } from '../lib/media.js';
 
 const NAV = [
   { group: '概览', items: [
@@ -16,7 +17,6 @@ const NAV = [
     { href: '/admin/categories', label: '分类管理', icon: UI.globe, match: '/admin/categories' },
   ] },
   { group: '收录运维', items: [
-    { href: '/admin/import', label: '批量导入', icon: UI.upload, match: '/admin/import' },
     { href: '/admin/audit', label: '操作日志', icon: UI.book, match: '/admin/audit' },
     { href: '/admin/admins', label: '管理员', icon: UI.users, match: '/admin/admins' },
   ] },
@@ -347,7 +347,7 @@ export function toolsPage({ user, env, tools, total, page, perPage, pages, q, ca
             <th class="num">访问</th><th>更新</th><th></th>
           </tr></thead>
           <tbody>${rows || `<tr><td colspan="8">
-            <div class="ad-empty">${UI.sparkle}<h3>还没有工具</h3><p>点击右上角「新增工具」或使用批量导入。</p>
+            <div class="ad-empty">${UI.sparkle}<h3>还没有工具</h3><p>点击右上角「新增工具」开始收录。</p>
             <a class="ad-btn ad-btn-primary" href="/admin/tools/new">${UI.plus}新增工具</a></div>
           </td></tr>`}</tbody>
         </table>
@@ -461,11 +461,21 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
     <form method="post" action="${isNew ? '/admin/tools' : `/admin/tools/${t.id}`}">
       <div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px" class="form-grid">
         <div class="ad-card">
-          <div class="ad-card-head"><h2>基础信息</h2></div>
+          <div class="ad-card-head">
+            <h2>基础信息</h2><span class="spacer"></span>
+            <span class="an-note">英文留空时前台自动回退显示中文</span>
+          </div>
           <div class="ad-card-body">
+            <!-- Bilingual text fields: Chinese on the left, English on the
+                 right. A blank English field means "not translated yet". -->
             <div class="ad-field">
               <label for="name">工具名称 *</label>
-              <input class="ad-input" id="name" name="name" required maxlength="80" value="${esc(t.name || '')}" placeholder="例如：ChatGPT">
+              <div class="ad-i18n-pair">
+                <input class="ad-input" id="name" name="name" required maxlength="80"
+                  value="${esc(t.name || '')}" placeholder="中文名称，例如：文心一言">
+                <input class="ad-input" id="name_en" name="name_en" maxlength="80"
+                  value="${esc(t.name_en || '')}" placeholder="English name, e.g. ERNIE Bot（留空沿用原名）">
+              </div>
             </div>
             <div class="ad-field">
               <label for="url">官网链接 *</label>
@@ -478,13 +488,21 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
             </div>
             <div class="ad-field">
               <label for="description">简介</label>
-              <textarea class="ad-textarea" id="description" name="description" maxlength="600" placeholder="一句话说明这个工具做什么、适合谁用">${esc(t.description || '')}</textarea>
+              <div class="ad-i18n-pair ad-i18n-pair-col">
+                <textarea class="ad-textarea" id="description" name="description" maxlength="600"
+                  placeholder="中文简介：一句话说明这个工具做什么、适合谁用">${esc(t.description || '')}</textarea>
+                <textarea class="ad-textarea" id="description_en" name="description_en" maxlength="600"
+                  placeholder="English description (optional)">${esc(t.description_en || '')}</textarea>
+              </div>
               <div class="ad-hint">建议 40–160 字，显示在卡片上（最多 3 行）。</div>
             </div>
             <div class="ad-field">
               <label for="tags">标签</label>
-              <input class="ad-input" id="tags" name="tags" value="${esc((t.tags || []).join(', '))}" placeholder="对话, 写作, 多模态">
-              <div class="ad-hint">用英文逗号分隔，最多显示 4 个。</div>
+              <div class="ad-i18n-pair">
+                <input class="ad-input" id="tags" name="tags" value="${esc((t.tags || []).join(', '))}" placeholder="对话, 写作, 多模态">
+                <input class="ad-input" id="tags_en" name="tags_en" value="${esc(t.tags_en || '')}" placeholder="chat, writing, multimodal">
+              </div>
+              <div class="ad-hint">用英文逗号分隔，最多显示 4 个。英文留空则沿用中文标签。</div>
             </div>
           </div>
         </div>
@@ -515,6 +533,28 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
             </div>
           </div>
 
+          <div class="ad-card" style="margin-bottom:16px">
+            <div class="ad-card-head">
+              <h2>评测正文</h2><span class="spacer"></span>
+              <button class="ad-btn ad-btn-sm ad-btn-primary" type="button" data-md-open>${UI.edit}打开编辑器</button>
+            </div>
+            <div class="ad-card-body">
+              <!-- One summary per language so a missing translation is obvious. -->
+              <div class="ad-md-lang-row">
+                <span class="ad-md-lang-tag">中文</span>
+                <div class="ad-hint" data-md-status="zh"></div>
+              </div>
+              <pre class="ad-md-preview" id="mdPreviewZh" aria-label="中文 Markdown 预览（前 10 行）"></pre>
+
+              <div class="ad-md-lang-row" style="margin-top:14px">
+                <span class="ad-md-lang-tag">English</span>
+                <div class="ad-hint" data-md-status="en"></div>
+              </div>
+              <pre class="ad-md-preview" id="mdPreviewEn" aria-label="English Markdown 预览（前 10 行）"></pre>
+              <div class="ad-hint" id="mdMore" hidden></div>
+            </div>
+          </div>
+
           <div class="ad-card">
             <div class="ad-card-head"><h2>展示标记</h2></div>
             <div class="ad-card-body">
@@ -531,11 +571,25 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
           </div>
 
           <div class="ad-card" style="margin-top:16px">
+            <div class="ad-card-head"><h2>Logo</h2></div>
             <div class="ad-card-body">
-              <div class="ad-field">
-                <label for="logo_url">Logo 图片地址</label>
+              <!-- Upload to R2, or paste an external URL. Both feed logo_url. -->
+              <div class="ad-logo-field" id="logoField">
+                <div class="ad-logo-preview" id="logoPreviewBox">
+                  ${t.logo_url
+                    ? `<img src="${esc(t.logo_url)}" alt="" id="logoPreviewImg">`
+                    : `<span class="ad-logo-initial">${esc(initialsOf(t.name || '?'))}</span>`}
+                </div>
+                <div class="ad-logo-actions">
+                  <label class="ad-btn ad-btn-sm" for="logoFile">上传图片</label>
+                  <input type="file" id="logoFile" accept="${ACCEPT_ATTR}" hidden>
+                  <button class="ad-btn ad-btn-sm ad-btn-ghost" type="button" id="logoClear" ${t.logo_url ? '' : 'hidden'}>移除</button>
+                </div>
+              </div>
+              <div class="ad-field" style="margin-top:12px">
+                <label for="logo_url">或填写图片地址</label>
                 <input class="ad-input" id="logo_url" name="logo_url" value="${esc(t.logo_url || '')}" placeholder="https://...">
-                <div class="ad-hint">留空则显示名称首字母。</div>
+                <div class="ad-hint" id="logoHint">支持 PNG / JPG / WebP / GIF / SVG / AVIF，最大 ${MAX_LABEL.logo}。留空则显示名称首字母。</div>
               </div>
             </div>
           </div>
@@ -548,18 +602,345 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
         ${!isNew ? `<a class="ad-btn ad-btn-ghost" href="/tools/${esc(t.slug)}" target="_blank" rel="noopener">${UI.externalLink}预览页面</a>` : ''}
       </div>
       <style>@media(max-width:1000px){.form-grid{grid-template-columns:1fr!important}}</style>
+
+      <!-- Full-screen Markdown editor with one tab per site language. Each
+           textarea lives inside the form, so both languages submit together
+           with the rest of the fields. -->
+      <div class="ad-mdeditor" id="mdModal" hidden>
+        <div class="ad-mdeditor-head">
+          <h2>编辑评测正文 · Markdown</h2>
+          <div class="ad-md-tabs" role="tablist">
+            <button class="ad-md-tab is-active" type="button" role="tab" data-md-lang="zh" aria-selected="true">中文</button>
+            <button class="ad-md-tab" type="button" role="tab" data-md-lang="en" aria-selected="false">English</button>
+          </div>
+          <span class="ad-md-count" id="mdCount">0 行 · 0 字</span>
+          <span class="spacer"></span>
+          <span class="ad-md-hint"># 标题 · **粗体** · - 列表 · &gt; 引用 · [链接](url) · | 表格 |</span>
+          <button class="ad-btn ad-btn-sm" type="button" data-md-close>取消</button>
+          <button class="ad-btn ad-btn-sm ad-btn-primary" type="button" data-md-save>保存</button>
+        </div>
+        <div class="ad-mdeditor-main">
+          <textarea class="ad-mdeditor-input" id="mdEditorZh" name="review_md" spellcheck="false" data-md-input="zh"
+            placeholder="# 评测标题&#10;&#10;这里写这个工具的深度评测……&#10;&#10;## 优点&#10;- 第一点&#10;- 第二点&#10;&#10;## 缺点&#10;- 第一点"></textarea>
+          <textarea class="ad-mdeditor-input" id="mdEditorEn" name="review_md_en" spellcheck="true" data-md-input="en" hidden
+            placeholder="# Review title&#10;&#10;Write the in-depth review here……&#10;&#10;## Pros&#10;- First point&#10;- Second point&#10;&#10;## Cons&#10;- First point"></textarea>
+          <div class="ad-mdeditor-preview" id="mdLive" aria-live="polite"></div>
+        </div>
+        <div class="ad-mdeditor-foot">
+          <label class="ad-btn ad-btn-sm" for="mdImage">${UI.plus}插入图片</label>
+          <input type="file" id="mdImage" accept="${ACCEPT_ATTR}" hidden>
+          <span class="ad-md-hint" id="mdUploadHint">图片上传至 R2，最大 ${MAX_LABEL.review}</span>
+          <span class="spacer"></span>
+          <span class="ad-md-hint" id="mdActiveLang">正在编辑：中文</span>
+        </div>
+      </div>
     </form>
     <script>
+      /* --------------------------------------------------- shared uploader */
+      /* One helper used by both the logo field and the Markdown editor. */
+      window.adUploadImage = function (file, kind, slug) {
+        var fd = new FormData();
+        fd.append('file', file);
+        fd.append('kind', kind);
+        fd.append('slug', slug || '');
+        return fetch('/admin/api/upload', { method: 'POST', body: fd, credentials: 'same-origin' })
+          .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }); });
+      };
+
+      /* ------------------------------------------------------ logo upload */
+      (function(){
+        var initialSlug = ${JSON.stringify(String(t.slug || ''))};
+        var field = document.getElementById('logoField');
+        if (!field) return;
+        var input = document.getElementById('logo_url');
+        var fileInput = document.getElementById('logoFile');
+        var box = document.getElementById('logoPreviewBox');
+        var clearBtn = document.getElementById('logoClear');
+        var hint = document.getElementById('logoHint');
+        var hintDefault = hint ? hint.textContent : '';
+
+        function preview(url) {
+          if (!url) {
+            box.innerHTML = '<span class="ad-logo-initial">' + box.dataset.initial + '</span>';
+            if (clearBtn) clearBtn.hidden = true;
+            return;
+          }
+          box.innerHTML = '';
+          var img = document.createElement('img');
+          img.src = url;
+          img.alt = '';
+          img.onerror = function () { hint.textContent = '图片无法加载，请检查地址是否可公开访问'; };
+          box.appendChild(img);
+          if (clearBtn) clearBtn.hidden = false;
+        }
+
+        // Remember the fallback initial so clearing can restore it.
+        var initEl = box.querySelector('.ad-logo-initial');
+        box.dataset.initial = initEl ? initEl.textContent : '?';
+
+        if (fileInput) {
+          fileInput.addEventListener('change', function(){
+            var f = fileInput.files && fileInput.files[0];
+            if (!f) return;
+            // The slug field may still be empty on a new tool; fall back to name.
+            var nameEl = document.getElementById('name');
+            var slug = (initialSlug || (document.getElementById('slug') || {}).value || (nameEl || {}).value || '');
+            hint.textContent = '上传中…';
+            window.adUploadImage(f, 'logo', slug).then(function(res){
+              if (!res.ok) { hint.textContent = res.error || '上传失败'; return; }
+              input.value = res.url;
+              preview(res.url);
+              hint.textContent = '已上传（' + Math.round(res.bytes / 1024) + ' KB），保存后生效';
+            }).catch(function(e){ hint.textContent = '上传失败：' + e.message; })
+              .finally(function(){ fileInput.value = ''; });
+          });
+        }
+
+        if (clearBtn) {
+          clearBtn.addEventListener('click', function(){
+            input.value = '';
+            preview('');
+            hint.textContent = hintDefault;
+          });
+        }
+
+        if (input) {
+          input.addEventListener('change', function(){ preview(input.value.trim()); });
+          if (input.value.trim()) preview(input.value.trim());
+        }
+      })();
+
       (function(){
         var name = document.getElementById('name'), slug = document.getElementById('slug');
         var prev = document.getElementById('slugPreview');
-        if (!slug || slug.value) return;
-        name.addEventListener('input', function(){
-          if (slug.value) return;
-          var s = name.value.trim().toLowerCase().replace(/['"]/g,'')
-            .replace(/[^a-z0-9\\u4e00-\\u9fa5]+/g,'-').replace(/^-+|-+$/g,'');
-          prev.textContent = s || 'auto';
+        if (name && slug && prev && !slug.value) {
+          name.addEventListener('input', function(){
+            if (slug.value) return;
+            var s = name.value.trim().toLowerCase().replace(/['"]/g,'')
+              .replace(/[^a-z0-9\\u4e00-\\u9fa5]+/g,'-').replace(/^-+|-+$/g,'');
+            prev.textContent = s || 'auto';
+          });
+        }
+      })();
+
+      /* ---------------------------------------------------- markdown editor */
+      /* Bilingual: one textarea per site language (zh / en). Both post with
+         the form as review_md and review_md_en. */
+      (function(){
+        var initial = {
+          zh: ${JSON.stringify(String(t.review_md || ''))},
+          en: ${JSON.stringify(String(t.review_md_en || ''))}
+        };
+        var modal = document.getElementById('mdModal');
+        var live = document.getElementById('mdLive');
+        var count = document.getElementById('mdCount');
+        var more = document.getElementById('mdMore');
+        var activeLangEl = document.getElementById('mdActiveLang');
+        if (!modal || !live) return;
+
+        var LANG_LABEL = { zh: '中文', en: 'English' };
+        var PREVIEW_LINES = 10;
+        var lang = 'zh';
+
+        var editors = {
+          zh: document.getElementById('mdEditorZh'),
+          en: document.getElementById('mdEditorEn')
+        };
+        var primes = {
+          zh: document.getElementById('mdPreviewZh'),
+          en: document.getElementById('mdPreviewEn')
+        };
+        var statuses = {
+          zh: document.querySelector('[data-md-status="zh"]'),
+          en: document.querySelector('[data-md-status="en"]')
+        };
+        var tabs = document.querySelectorAll('[data-md-lang]');
+
+        function currentEditor() { return editors[lang]; }
+
+        /* Source excerpt shown on the form: first 10 lines of each language. */
+        function renderCardPreview() {
+          var missing = [];
+          ['zh', 'en'].forEach(function(code){
+            var text = initial[code] || '';
+            var el = primes[code];
+            var st = statuses[code];
+            var lines = text.split('\\n');
+            if (!text.trim()) {
+              if (el) { el.textContent = '（尚未填写）'; el.classList.add('is-empty'); }
+              if (st) st.textContent = '未填写';
+              missing.push(LANG_LABEL[code]);
+              return;
+            }
+            if (el) {
+              el.classList.remove('is-empty');
+              el.textContent = lines.slice(0, PREVIEW_LINES).join('\\n');
+            }
+            if (st) st.textContent = '共 ' + lines.length + ' 行 / ' + text.trim().length + ' 字';
+          });
+
+          var zhLines = (initial.zh || '').split('\\n').length;
+          var rest = zhLines - PREVIEW_LINES;
+          if (more) {
+            if (missing.length) {
+              // Warning takes priority: an untranslated review is the useful signal.
+              more.hidden = false;
+              more.textContent = missing.join(' / ') + ' 尚未填写，对应语言的详情页不会展示评测正文。';
+            } else if (rest > 0) {
+              more.hidden = false;
+              more.textContent = '… 中文还有 ' + rest + ' 行，在编辑器中查看完整内容';
+            } else {
+              more.hidden = true;
+            }
+          }
+        }
+
+        function updateCount() {
+          var v = currentEditor() ? currentEditor().value : '';
+          var lines = v ? v.split('\\n').length : 0;
+          if (count) count.textContent = lines + ' 行 · ' + v.trim().length + ' 字';
+        }
+
+        /* Lightweight live preview for the language being edited. The
+           authoritative render happens server-side on save. */
+        function esc(s) {
+          // Backtick written as \x60: a literal one would terminate the outer
+          // template literal that builds this page.
+          return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+            .replace(/\\x60([^\\x60]+)\\x60/g, '<code>$1</code>');
+        }
+
+        function renderLive() {
+          var src = currentEditor() ? currentEditor().value : '';
+          if (!src.trim()) { live.innerHTML = '<p class="is-empty">预览将在这里显示</p>'; return; }
+          var html = src.split('\\n').map(function(line){
+            var l = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            if (/^\\s*$/.test(l)) return '';
+            var h = l.match(/^\\s{0,3}(#{1,6})\\s+(.*)$/);
+            if (h) { var lv = Math.min(6, h[1].length + 1); return '<h' + lv + '>' + esc(h[2]) + '</h' + lv + '>'; }
+            if (/^\\s*([-*+]|\\d+\\.)\\s+/.test(l)) return '<li>' + esc(l.replace(/^\\s*([-*+]|\\d+\\.)\\s+/, '')) + '</li>';
+            if (/^\\s*>/.test(l)) return '<blockquote>' + esc(l.replace(/^\\s*>\\s?/, '')) + '</blockquote>';
+            if (/^\\s*\\x60\\x60\\x60/.test(l)) return '<hr>';
+            return '<p>' + esc(l) + '</p>';
+          }).join('');
+          live.innerHTML = html;
+        }
+
+        function switchLang(code) {
+          lang = code;
+          ['zh', 'en'].forEach(function(c){
+            if (editors[c]) editors[c].hidden = c !== code;
+          });
+          tabs.forEach(function(b){
+            var on = b.getAttribute('data-md-lang') === code;
+            b.classList.toggle('is-active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+          if (activeLangEl) activeLangEl.textContent = '正在编辑：' + LANG_LABEL[code];
+          updateCount();
+          renderLive();
+          if (editors[code]) editors[code].focus();
+        }
+
+        function open() {
+          editors.zh.value = initial.zh;
+          editors.en.value = initial.en;
+          modal.hidden = false;
+          document.body.classList.add('md-editing');
+          switchLang(lang);
+          var ed = currentEditor();
+          ed.setSelectionRange(ed.value.length, ed.value.length);
+        }
+
+        function close(apply) {
+          if (apply) {
+            initial.zh = editors.zh.value;
+            initial.en = editors.en.value;
+            renderCardPreview();
+          }
+          modal.hidden = true;
+          document.body.classList.remove('md-editing');
+        }
+
+        /* ------------------------------------------------ image insertion */
+        var imgInput = document.getElementById('mdImage');
+        var uploadHint = document.getElementById('mdUploadHint');
+        var hintDefault = uploadHint ? uploadHint.textContent : '';
+
+        function insertAtCaret(text) {
+          var ed = currentEditor();
+          if (!ed) return;
+          var start = ed.selectionStart || 0;
+          var end = ed.selectionEnd || 0;
+          var value = ed.value;
+          var pad = value.slice(0, start) && !/\\n$/.test(value.slice(0, start)) ? '\\n' : '';
+          var snippet = pad + text + '\\n';
+          ed.value = value.slice(0, start) + snippet + value.slice(end);
+          var caret = start + snippet.length;
+          ed.setSelectionRange(caret, caret);
+          ed.focus();
+          updateCount();
+          renderLive();
+        }
+
+        function uploadToReview(file) {
+          if (!file) return;
+          var nameEl = document.getElementById('name');
+          var slugEl = document.getElementById('slug');
+          var slug = (slugEl && slugEl.value) || initialSlug || (nameEl && nameEl.value) || 'review';
+          if (uploadHint) uploadHint.textContent = '上传中…';
+          window.adUploadImage(file, 'review', slug).then(function(res){
+            if (!res.ok) { if (uploadHint) uploadHint.textContent = res.error || '上传失败'; return; }
+            var alt = String(file.name || 'image').replace(/\\.[^.]+$/, '');
+            insertAtCaret('![' + alt + '](' + res.url + ')');
+            if (uploadHint) uploadHint.textContent = '已插入（' + Math.round(res.bytes / 1024) + ' KB）';
+          }).catch(function(e){
+            if (uploadHint) uploadHint.textContent = '上传失败：' + e.message;
+          }).finally(function(){ if (imgInput) imgInput.value = ''; });
+        }
+
+        tabs.forEach(function(b){
+          b.addEventListener('click', function(){ switchLang(b.getAttribute('data-md-lang')); });
         });
+        ['zh', 'en'].forEach(function(c){
+          var ed = editors[c];
+          if (!ed) return;
+          ed.addEventListener('input', function(){ if (c === lang) { updateCount(); renderLive(); } });
+          ed.addEventListener('dragover', function(e){
+            if (e.dataTransfer && e.dataTransfer.types.indexOf('Files') !== -1) { e.preventDefault(); ed.classList.add('is-dragover'); }
+          });
+          ed.addEventListener('dragleave', function(){ ed.classList.remove('is-dragover'); });
+          ed.addEventListener('drop', function(e){
+            if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+            e.preventDefault(); ed.classList.remove('is-dragover');
+            uploadToReview(e.dataTransfer.files[0]);
+          });
+          ed.addEventListener('paste', function(e){
+            var items = (e.clipboardData && e.clipboardData.items) || [];
+            for (var i = 0; i < items.length; i++) {
+              if (items[i].kind === 'file' && items[i].type.indexOf('image/') === 0) {
+                e.preventDefault();
+                uploadToReview(items[i].getAsFile());
+                return;
+              }
+            }
+          });
+        });
+
+        if (imgInput) imgInput.addEventListener('change', function(){ uploadToReview(imgInput.files && imgInput.files[0]); });
+
+        var openBtn = document.querySelector('[data-md-open]');
+        if (openBtn) openBtn.addEventListener('click', function(){ open(); });
+        document.querySelectorAll('[data-md-close]').forEach(function(b){ b.addEventListener('click', function(){ close(false); }); });
+        document.querySelectorAll('[data-md-save]').forEach(function(b){ b.addEventListener('click', function(){ close(true); }); });
+        document.addEventListener('keydown', function(e){
+          if (modal.hidden) return;
+          if (e.key === 'Escape') { e.preventDefault(); close(false); }
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); close(true); }
+        });
+
+        renderCardPreview();
       })();
     </script>
   `;
@@ -667,60 +1048,6 @@ export function categoryFormPage({ user, env, category, icons, flash, isNew }) {
 }
 
 // --- import -----------------------------------------------------------------
-
-export function importPage({ user, env, flash, result, csvTemplate }) {
-  const resultHtml = result
-    ? `<div class="ad-alert ${result.skipped && !result.inserted && !result.updated ? 'ad-alert-warn' : 'ad-alert-success'}">
-        <div>
-          <strong>导入完成：</strong>新增 ${result.inserted} 条，更新 ${result.updated} 条，跳过 ${result.skipped} 条。
-          ${result.errors?.length ? `<ul style="margin:8px 0 0;padding-left:18px;font-size:12.5px">${result.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
-        </div>
-      </div>`
-    : '';
-
-  const children = `
-    ${flash ? `<div class="ad-alert ad-alert-${esc(flash.type)}" id="adFlash" data-message="1">${esc(flash.message)}</div>` : ''}
-    ${resultHtml}
-    <div style="display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px" class="imp-grid">
-      <div class="ad-card">
-        <div class="ad-card-head"><h2>CSV 批量导入</h2></div>
-        <div class="ad-card-body">
-          <form method="post" action="/admin/import" enctype="multipart/form-data">
-            <div class="ad-field">
-              <label for="file">选择 CSV 文件</label>
-              <input class="ad-input" id="file" name="file" type="file" accept=".csv,text/csv" style="height:auto;padding:8px 11px">
-            </div>
-            <div class="ad-field">
-              <label for="csv">…或直接粘贴 CSV 内容</label>
-              <textarea class="ad-textarea" id="csv" name="csv" style="min-height:220px;font-family:ui-monospace,monospace;font-size:12.5px" placeholder="name,url,category,tags,description,pricing,hot,new,featured"></textarea>
-            </div>
-            <button class="ad-btn ad-btn-primary" type="submit">${UI.upload}开始导入</button>
-          </form>
-        </div>
-      </div>
-      <div class="ad-card">
-        <div class="ad-card-head"><h2>字段说明</h2></div>
-        <div class="ad-card-body" style="font-size:12.5px;color:var(--ad-text-2);line-height:1.75">
-          <p style="margin:0 0 10px"><code>name</code> 工具名称（必填）<br>
-          <code>url</code> 官网链接（必填，作为去重依据）<br>
-          <code>category</code> 分类名称或 slug<br>
-          <code>tags</code> 逗号分隔的标签（用引号包裹整个字段）<br>
-          <code>description</code> 简介<br>
-          <code>pricing</code> free / freemium / paid / opensource<br>
-          <code>hot</code> <code>new</code> <code>featured</code> 填 1 或 0<br>
-          <code>logo</code> <code>sort</code> 可选</p>
-          <p style="margin:0 0 12px">同名工具或同 URL 会被更新，其余新增。缺失的分类会被留空。</p>
-          <a class="ad-btn ad-btn-sm" href="#" data-copy="${esc(csvTemplate)}">${UI.download}复制模板头</a>
-        </div>
-      </div>
-    </div>
-    <style>@media(max-width:1000px){.imp-grid{grid-template-columns:1fr!important}}</style>
-  `;
-
-  return adminLayout({ title: '批量导入', breadcrumb: '用 CSV 批量维护收录', user, env, children, activePath: '/admin/import' });
-}
-
-// --- audit ------------------------------------------------------------------
 
 export function auditPage({ user, env, entries, total = 0, page = 1, perPage = 20, pages = 1, actor = '', flash }) {
   const rows = entries.map((a) => `<tr>

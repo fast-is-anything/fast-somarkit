@@ -6,6 +6,7 @@ import { esc, html } from '../lib/crypto.js';
 import { ICONS, UI, icon } from '../lib/icons.js';
 import { logoGlyph } from '../lib/logo.js';
 import { t, pricingLabel, LANGS, normalizeLang } from '../lib/i18n.js';
+import { renderMarkdown } from '../lib/markdown.js';
 
 function brandMark() {
   return `<span class="brand-mark" aria-hidden="true">${logoGlyph(22)}</span>`;
@@ -203,7 +204,6 @@ function hero({ total, catCount, featured, lang = 'zh' }) {
       return `<a class="hero-agent-card hero-agent-accent-${i % 4}"
           href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"
           data-tool-id="${item.id}">
-        ${logoBox(item, 'hero-agent-logo')}
         <div class="hero-agent-head">
           <span class="hero-agent-name">${esc(item.name)}</span>
           ${kicker ? `<span class="hero-agent-kicker">${esc(kicker)}</span>` : ''}
@@ -250,24 +250,78 @@ function truncate(s, n) {
   return s.length > n ? `${s.slice(0, n)}…` : s;
 }
 
+/**
+ * Two-letter monogram for a tool without a logo.
+ *
+ * The tiles are a fixed square, so a variable 1–2 character label reads as
+ * inconsistent next to a neighbour's longer one. Every branch is therefore
+ * normalised to exactly two glyphs, and a Latin brand is always preferred over
+ * a descriptive CJK suffix:
+ *   "ChatGPT"        → CH  (two Latin words → first letter of each)
+ *   "GitHub Copilot" → GC
+ *   "GPT 系列"       → GP  (brand word first, ignore the CJK descriptor)
+ *   "Mistral 模型"   → MI
+ *   "豆包"           → 豆包 (CJK has no letters → first two characters)
+ *   "通义千问"       → 通义
+ *   "扣子 Coze"      → 扣C  (CJK-first mixed name → one of each)
+ *   "海螺 AI"        → 海A
+ *   "X"              → X   (only one glyph exists)
+ */
 function initials(name) {
-  const s = String(name || '?').trim();
-  const cn = s.match(/[\u4e00-\u9fa5]/);
-  if (cn) return s.slice(0, 1);
-  const parts = s.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return s.slice(0, 2).toUpperCase();
+  const s = String(name || '').trim();
+  if (!s) return '?';
+
+  const CJK = /[\u3400-\u4dbf\u4e00-\u9fa5]/;
+  const words = s.split(/\s+/).filter(Boolean);
+  // Latin-led name ("GPT 系列", "v0", "AI 绘图助手"): the brand comes first,
+  // so take the first two letters of its leading word and stop.
+  const latinWords = words.filter((w) => /[A-Za-z0-9]/.test(w));
+
+  if (latinWords.length >= 2) {
+    const a = latinWords[0].match(/[A-Za-z0-9]/);
+    const b = latinWords[1].match(/[A-Za-z0-9]/);
+    return `${a[0]}${b[0]}`.toUpperCase();
+  }
+
+  const cjkChars = Array.from(s).filter((ch) => CJK.test(ch));
+
+  if (latinWords.length === 1 && words[0] === latinWords[0]) {
+    // Latin first word wins over any descriptive CJK tail.
+    const head = latinWords[0].replace(/[^A-Za-z0-9]/g, '');
+    return head.slice(0, 2).toUpperCase() || s.slice(0, 2).toUpperCase();
+  }
+
+  if (cjkChars.length >= 2) {
+    // Mixed "扣子 Coze" / "海螺 AI" (CJK first, short Latin tail): one of each
+    // reads better than two CJK characters.
+    if (latinWords.length === 1 && cjkChars.length <= 2) {
+      const tail = latinWords[0].match(/[A-Za-z0-9]/);
+      if (tail) return `${cjkChars[0]}${tail[0]}`;
+    }
+    return cjkChars.slice(0, 2).join('');
+  }
+  if (cjkChars.length === 1) return cjkChars[0];
+
+  // Pure Latin with no separators handled above.
+  const head = s.replace(/[^A-Za-z0-9]/g, '');
+  return head.slice(0, 2).toUpperCase() || s.slice(0, 2).toUpperCase();
 }
 
 function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 }
 
+/**
+ * Brand logo tile: the stored image when there is one, the name's initials
+ * otherwise. The real name is exposed to assistive tech, the image itself is
+ * decorative (the adjacent <h3> already announces it).
+ */
 function logoBox(tool, cls) {
+  const label = esc(tool.name || '');
   if (tool.logo_url) {
-    return `<span class="${cls}"><img src="${esc(tool.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+    return `<span class="logo-tile ${cls}" role="img" aria-label="${label}"><img src="${esc(tool.logo_url)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"></span>`;
   }
-  return `<span class="${cls}" aria-hidden="true">${esc(initials(tool.name))}</span>`;
+  return `<span class="logo-tile ${cls}" role="img" aria-label="${label}"><span class="logo-text" aria-hidden="true">${esc(initials(tool.name))}</span></span>`;
 }
 
 function toolCard(item, lang = 'zh') {
@@ -280,6 +334,7 @@ function toolCard(item, lang = 'zh') {
     data-pricing="${esc(item.pricing)}"
     data-search="${esc(haystack)}">
     <div class="tool-card-header">
+      ${logoBox(item, 'tool-card-logo')}
       <div class="tool-info">
         <h3 class="tool-name">
           <span>${esc(item.name)}</span>
@@ -502,6 +557,14 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
   const tags = tool.tags.map((tag) => `<span class="tool-tag">${esc(tag)}</span>`).join('');
   // Plain-text tag list for the info-card row ("A · B · C").
   const tagsText = tool.tags.join(' · ');
+  // Long-form editorial review. Each language has its own column; when a
+  // translation is missing we fall back to the other language rather than
+  // showing an empty section.
+  const isEn = normalizeLang(lang) === 'en';
+  const reviewPrimary = isEn ? tool.review_md_en : tool.review_md;
+  const reviewFallback = isEn ? tool.review_md : tool.review_md_en;
+  const reviewSource = String(reviewPrimary || '').trim() ? reviewPrimary : reviewFallback;
+  const reviewHtml = renderMarkdown(reviewSource || '');
 
   const body = `${head({
     title: `${tool.name} — ${pricingLabel(lang, tool.pricing)} | SoMarkIt`,
@@ -550,6 +613,9 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
         </div>
         <p class="detail-disclaimer">${esc(t(lang, 'detail.disclaimer'))}</p>
       </div>
+      ${reviewHtml ? `<section class="detail-review" aria-label="${esc(t(lang, 'detail.reviewLabel'))}">
+        ${reviewHtml}
+      </section>` : ''}
       <div class="tool-info-grid">
         <div class="tool-info-card">
           <div class="info-label">${esc(t(lang, 'detail.infoCategory'))}</div>

@@ -86,6 +86,7 @@ const DICT = {
     'detail.infoPrice': '价格',
     'detail.infoTags': '标签',
     'detail.infoWebsite': '官网',
+    'detail.reviewLabel': '评测正文',
 
     // Submit-tool form
     'submit.title': '提交工具',
@@ -194,6 +195,7 @@ const DICT = {
     'detail.infoPrice': 'Pricing',
     'detail.infoTags': 'Tags',
     'detail.infoWebsite': 'Website',
+    'detail.reviewLabel': 'Review',
 
     // Submit-tool form
     'submit.title': 'Submit a tool',

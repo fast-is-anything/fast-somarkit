@@ -24,6 +24,15 @@ database_id = "7224c811-6811-4ce3-b680-dab6479a98f1"
 migrations_dir = "db/migrations"
 
 # ---------------------------------------------------------------------------
+# R2 — uploaded logos / images
+#   Public URL prefix: https://images.somarkit.com/<key>
+#   See .research/R2-路径规划.md for the key convention.
+# ---------------------------------------------------------------------------
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "somarkit-assets"
+
+# ---------------------------------------------------------------------------
 # Static assets (favicon, og image, vendor JS)
 # ---------------------------------------------------------------------------
 [assets]
@@ -33,6 +42,8 @@ binding = "ASSETS"
 [vars]
 SITE_NAME = "SoMarkIt"
 SITE_URL = "https://somarkit.com"
+# Public base URL of the R2 bucket's custom domain (no trailing slash).
+MEDIA_BASE_URL = "https://images.somarkit.com"
 # Comma separated list of Google accounts allowed into /admin
 ADMIN_EMAILS = "eastlion123456@gmail.com,dongdochong@gmail.com"
 # GA4 measurement id (G-XXXXXXXXXX). Leave empty to disable the GA tag entirely

@@ -32,7 +32,20 @@ CREATE TABLE IF NOT EXISTS tools (
   status          TEXT    NOT NULL DEFAULT 'published', -- draft | published | archived
   sort_order      INTEGER NOT NULL DEFAULT 0,
   visit_count     INTEGER NOT NULL DEFAULT 0,
-  source          TEXT    DEFAULT '',      -- provenance for batch imports
+  -- English twins of the user-facing text above. An empty value means "not
+  -- translated yet": the front end falls back to the Chinese original, and
+  -- `name_en` in particular falls back to `name` (most tool names are already
+  -- English).
+  name_en         TEXT    DEFAULT '',
+  description_en  TEXT    DEFAULT '',
+  tags_en         TEXT    DEFAULT '',
+  -- Long-form editorial review, authored as Markdown in the admin console and
+  -- rendered on the tool detail page between the cards and the info grid.
+  -- One column per site language: `review_md` is Chinese, `review_md_en` is
+  -- English. A missing translation falls back to the other language.
+  review_md       TEXT    DEFAULT '',
+  review_md_en    TEXT    DEFAULT '',
+  source          TEXT    DEFAULT '',      -- provenance for imports
   created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );

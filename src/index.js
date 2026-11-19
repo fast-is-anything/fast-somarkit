@@ -4,22 +4,26 @@
 
 import { esc, json, redirect, getCookie, setCookie, sign, secureIfHttps } from './lib/crypto.js';
 import {
-  listCategories, listCategoriesPage, countToolsByCategory, listPublishedTools, listFeaturedTools,
+  listCategories, listCategoriesPage, countToolsByCategory, listPublishedTools, listFeaturedTools, listTrendingTools,
   getToolBySlug, getTool, listToolsAdmin, createTool, updateTool, deleteTool,
   incrementVisits, getCategoryBySlug, getCategory, createCategory, updateCategory,
   deleteCategory, slugify, logAudit, listAudit, listAuditPage, dashboardStats, topTools,
-  importToolsCSV, listAdmins, listAdminsPage, setAdminActive, deleteAuditLog, findAdminByEmail,
+  listAdmins, listAdminsPage, setAdminActive, deleteAuditLog, findAdminByEmail,
   recordClick, analyticsSummary,
   createSubmission, recentSubmissionCount, listSubmissionsAdmin, countSubmissionsByStatus,
   getSubmission, approveSubmission, rejectSubmission, deleteSubmission,
 } from './lib/db.js';
 import { sendClickToGa } from './lib/ga.js';
 import { gaDailySeries, isGaConfigured } from './lib/ga-report.js';
+import { storeUpload, deleteMedia, ACCEPT_ATTR, MAX_LABEL } from './lib/media.js';
+import {
+  localizeTool, localizeTools, localizeCategory, localizeCategories,
+} from './lib/localize.js';
 import { ICONS } from './lib/icons.js';
 import { homePage, toolPage, categoryPage, aboutPage, notFoundPage, submitPage, submitSuccessPage } from './templates/public.js';
 import {
   dashboardPage, toolsPage, toolFormPage, categoriesPage, categoryFormPage,
-  importPage, auditPage, adminsPage, loginPage,
+  auditPage, adminsPage, loginPage,
   submissionsPage, submissionDetailPage,
 } from './templates/admin.js';
 import { analyticsPage } from './templates/analytics.js';
@@ -28,18 +32,6 @@ import {
   SESSION_COOKIE, redirectUri,
 } from './lib/auth.js';
 import { normalizeLang, LANG_COOKIE } from './lib/i18n.js';
-
-const CSV_TEMPLATE = 'name,url,category,tags,description,pricing,hot,new,featured';
-
-/**
- * Best-effort language guess from Accept-Language.
- * Chinese-speaking clients get zh, everything else gets English.
- */
-function guessLang(request) {
-  const al = (request.headers.get('Accept-Language') || '').toLowerCase();
-  if (!al) return 'zh';
-  return /\b(zh|cmn|yue)\b/.test(al) ? 'zh' : 'en';
-}
 
 export default {
   async fetch(request, env, ctx) {
@@ -63,6 +55,31 @@ export default {
 };
 
 // ---------------------------------------------------------------------------
+// Localised data access.
+//
+// The public site is bilingual: every query that feeds a public template is
+// wrapped here so the templates receive already-localised content. Keeping the
+// translation at the data boundary (rather than sprinkling `x_en || x` through
+// the templates) means a new template automatically gets the right language.
+// ---------------------------------------------------------------------------
+
+async function loadPublished(db, lang) {
+  return localizeTools(await listPublishedTools(db), lang);
+}
+async function loadCategories(db, lang, opts) {
+  return localizeCategories(await listCategories(db, opts), lang);
+}
+async function loadTrending(db, lang) {
+  return localizeTools(await listTrendingTools(db, { limit: 2, days: 30 }), lang);
+}
+async function loadToolBySlug(db, lang, slug) {
+  return localizeTool(await getToolBySlug(db, slug), lang);
+}
+async function loadCategoryBySlug(db, lang, slug) {
+  return localizeCategory(await getCategoryBySlug(db, slug), lang);
+}
+
+// ---------------------------------------------------------------------------
 
 async function router(request, env, ctx) {
   const url = new URL(request.url);
@@ -72,10 +89,15 @@ async function router(request, env, ctx) {
   // GA4 measurement id for the public pages; empty string disables the tag.
   const gaId = String(env.GA_MEASUREMENT_ID || '').trim();
 
-  // Language: explicit ?lang= wins (and is persisted via cookie); otherwise
-  // fall back to the stored cookie, then the browser's Accept-Language.
+  // Language: an explicit ?lang= wins (and is persisted in a cookie); otherwise
+  // the stored cookie, otherwise Chinese.
+  //
+  // Deliberately NOT derived from Accept-Language: Googlebot sends
+  // `Accept-Language: en`, so guessing would make the crawler index the English
+  // rendering of every Chinese URL. The Chinese site is the canonical one;
+  // English lives at `?lang=en` and is advertised through hreflang.
   const explicitLang = url.searchParams.get('lang');
-  const lang = normalizeLang(explicitLang || getCookie(request, LANG_COOKIE) || guessLang(request));
+  const lang = normalizeLang(explicitLang || getCookie(request, LANG_COOKIE) || 'zh');
   const setLangCookie = explicitLang
     ? setCookie(LANG_COOKIE, lang, { maxAge: 60 * 60 * 24 * 365, httpOnly: false, secure: false })
     : null;
@@ -92,7 +114,7 @@ async function router(request, env, ctx) {
       // stops the browser from reusing it without asking.
       res.headers.set('Cache-Control', 'public, max-age=0, s-maxage=60, must-revalidate');
     }
-    res.headers.set('Vary', 'Cookie, Accept-Language');
+    res.headers.set('Vary', 'Cookie');
     return res;
   };
 
@@ -141,16 +163,20 @@ async function router(request, env, ctx) {
 
   if (path === '/api/search' && method === 'GET') {
     const q = (url.searchParams.get('q') || '').trim().toLowerCase();
-    const tools = await listPublishedTools(env.DB);
-    const results = (q
-      ? tools.filter((t) =>
-          [t.name, t.description, t.tags.join(' '), t.category_name]
-            .filter(Boolean).join(' ').toLowerCase().includes(q))
-      : tools
-    ).slice(0, 30).map((t) => ({
-      id: t.id, name: t.name, slug: t.slug, url: t.url,
-      description: t.description, category: t.category_name, pricing: t.pricing,
-    }));
+    const tools = await loadPublished(env.DB, lang);
+    // Match BOTH languages regardless of the visitor's language: someone on the
+    // English site may still search for a Chinese tool name (and vice versa).
+    // The haystack is built from the raw row so the Chinese original stays
+    // searchable even when an English translation is shown.
+    const haystack = (t) => [
+      t.name, t.name_en, t.description, t.description_en,
+      t.tags.join(' '), t.tags_en, t.category_name,
+    ].filter(Boolean).join(' ').toLowerCase();
+    const results = (q ? tools.filter((t) => haystack(t).includes(q)) : tools)
+      .slice(0, 30).map((t) => ({
+        id: t.id, name: t.name, slug: t.slug, url: t.url,
+        description: t.description, category: t.category_name, pricing: t.pricing,
+      }));
     return json({ query: q, count: results.length, results });
   }
 
@@ -165,9 +191,9 @@ async function router(request, env, ctx) {
   }
   if (path === '/about') {
     const [categories, counts, tools] = await Promise.all([
-      listCategories(env.DB),
+      loadCategories(env.DB, lang),
       countToolsByCategory(env.DB),
-      listPublishedTools(env.DB),
+      loadPublished(env.DB, lang),
     ]);
     return withLang(aboutPage({ categories, counts, total: tools.length, theme, lang, gaId }));
   }
@@ -176,9 +202,9 @@ async function router(request, env, ctx) {
   if (path === '/submit') {
     if (method === 'GET') {
       const [categories, counts, tools] = await Promise.all([
-        listCategories(env.DB),
+        loadCategories(env.DB, lang),
         countToolsByCategory(env.DB),
-        listPublishedTools(env.DB),
+        loadPublished(env.DB, lang),
       ]);
       return withLang(submitPage({ categories, counts, total: tools.length, theme, lang, gaId }));
     }
@@ -188,21 +214,21 @@ async function router(request, env, ctx) {
   }
   if (path === '/submit/thanks') {
     const [categories, counts, tools] = await Promise.all([
-      listCategories(env.DB),
+      loadCategories(env.DB, lang),
       countToolsByCategory(env.DB),
-      listPublishedTools(env.DB),
+      loadPublished(env.DB, lang),
     ]);
     return withLang(submitSuccessPage({ categories, counts, total: tools.length, theme, lang, gaId }));
   }
 
   if (path.startsWith('/tools/')) {
     const slug = path.slice(7);
-    const tool = await getToolBySlug(env.DB, slug);
+    const tool = await loadToolBySlug(env.DB, lang, slug);
     if (tool && tool.status !== 'draft') {
       const [categories, counts, allTools] = await Promise.all([
-        listCategories(env.DB),
+        loadCategories(env.DB, lang),
         countToolsByCategory(env.DB),
-        listPublishedTools(env.DB),
+        loadPublished(env.DB, lang),
       ]);
       const related = allTools
         .filter((x) => x.id !== tool.id && x.category_id === tool.category_id)
@@ -219,8 +245,8 @@ async function router(request, env, ctx) {
   // ----------------------------------------------------------------- SEO ---
   if (path === '/sitemap.xml') {
     const [categories, tools] = await Promise.all([
-      listCategories(env.DB),
-      listPublishedTools(env.DB),
+      loadCategories(env.DB, lang),
+      loadPublished(env.DB, lang),
     ]);
     return sitemap(categories, tools);
   }
@@ -241,7 +267,7 @@ async function router(request, env, ctx) {
   // indexed URLs working with a permanent redirect to the root-level path.
   if (path.startsWith('/c/')) {
     const slug = path.slice(3);
-    const category = slug && !slug.includes('/') ? await getCategoryBySlug(env.DB, slug) : null;
+    const category = slug && !slug.includes('/') ? await loadCategoryBySlug(env.DB, lang, slug) : null;
     if (category) {
       const qs = url.search || '';
       return new Response(null, {
@@ -257,13 +283,13 @@ async function router(request, env, ctx) {
   // a tool page — only single-segment paths that match a category slug.
   if (path !== '/' && !path.includes('/', 1)) {
     const slug = path.slice(1);
-    const category = await getCategoryBySlug(env.DB, slug);
+    const category = await loadCategoryBySlug(env.DB, lang, slug);
     if (category && category.visible) {
       const [categories, counts, allTools, featured] = await Promise.all([
-        listCategories(env.DB),
+        loadCategories(env.DB, lang),
         countToolsByCategory(env.DB),
-        listPublishedTools(env.DB),
-        listFeaturedTools(env.DB, 6),
+        loadPublished(env.DB, lang),
+        loadTrending(env.DB, lang),
       ]);
       const tools = allTools.filter((x) => x.category_id === category.id);
       return withLang(categoryPage({
@@ -274,9 +300,9 @@ async function router(request, env, ctx) {
   }
 
   const [categories, counts, tools] = await Promise.all([
-    listCategories(env.DB),
+    loadCategories(env.DB, lang),
     countToolsByCategory(env.DB),
-    listPublishedTools(env.DB),
+    loadPublished(env.DB, lang),
   ]);
   return withLang(notFoundPage({ categories, counts, total: tools.length, theme, lang, gaId }));
 }
@@ -285,10 +311,10 @@ async function router(request, env, ctx) {
 
 async function renderHome(request, env, theme, lang = 'zh', gaId = '') {
   const [categories, counts, tools, featured] = await Promise.all([
-    listCategories(env.DB),
+    loadCategories(env.DB, lang),
     countToolsByCategory(env.DB),
-    listPublishedTools(env.DB),
-    listFeaturedTools(env.DB, 6),
+    loadPublished(env.DB, lang),
+    loadTrending(env.DB, lang),
   ]);
 
   const res = homePage({
@@ -300,7 +326,7 @@ async function renderHome(request, env, theme, lang = 'zh', gaId = '') {
   // Cache policy is set centrally in withLang(); only the edge TTL is widened
   // here because the home listing is the hottest page.
   res.headers.set('Cache-Control', 'public, max-age=0, s-maxage=60, must-revalidate');
-  res.headers.set('Vary', 'Cookie, Accept-Language');
+  res.headers.set('Vary', 'Cookie');
   return res;
 }
 
@@ -346,9 +372,9 @@ async function handleSubmit(request, env, theme, lang, gaId) {
 
   const renderError = async (msg) => {
     const [categories, counts, tools] = await Promise.all([
-      listCategories(env.DB),
+      loadCategories(env.DB, lang),
       countToolsByCategory(env.DB),
-      listPublishedTools(env.DB),
+      loadPublished(env.DB, lang),
     ]);
     return submitPage({
       categories, counts, total: tools.length, theme, lang, gaId,
@@ -467,6 +493,24 @@ async function handleAdmin(request, env, ctx, path, url, theme) {
   if (!user) {
     if (path === '/admin' && method === 'GET') return redirect('/admin/login');
     return redirect('/admin/login');
+  }
+
+  // ------------------------------------------------------------ uploads ---
+  // Image upload endpoint used by the logo field and the Markdown editor.
+  // Requires an admin session (checked above); returns JSON.
+  if (path === '/admin/api/upload' && method === 'POST') {
+    try {
+      const form = await request.formData();
+      const file = form.get('file');
+      const kind = String(form.get('kind') || 'logo');
+      const slug = String(form.get('slug') || '');
+      const result = await storeUpload(env, { file, kind, slug });
+      if (!result.ok) return json({ ok: false, error: result.error }, 400);
+      await logAudit(env.DB, user.email, 'media.upload', 'media', null, `${kind}: ${result.key}`);
+      return json({ ok: true, key: result.key, url: result.url, bytes: result.bytes });
+    } catch (err) {
+      return json({ ok: false, error: String(err && err.message || err) }, 500);
+    }
   }
 
   // ---------------------------------------------------------------- GET ---
@@ -598,11 +642,6 @@ async function adminGet(env, ctx, request, path, url, user) {
     }));
   }
 
-  // import
-  if (path === '/admin/import') {
-    return html(importPage({ user, env, flash, csvTemplate: CSV_TEMPLATE }));
-  }
-
   // analytics — click statistics dashboard
   if (path === '/admin/analytics') {
     const days = [7, 30, 90].includes(Number(url.searchParams.get('days')))
@@ -689,6 +728,11 @@ async function adminPost(env, ctx, request, path, url, user) {
         is_featured: b.is_featured === '1' || b.is_featured === 'on' || b.is_featured === true,
         status: b.status || 'published',
         sort_order: Number(b.sort_order) || 0,
+        name_en: String(b.name_en || '').trim(),
+        description_en: String(b.description_en || '').trim(),
+        tags_en: String(b.tags_en || '').trim(),
+        review_md: String(b.review_md || ''),
+        review_md_en: String(b.review_md_en || ''),
         source: 'admin',
       });
       await logAudit(env.DB, user.email, 'tool.create', 'tool', id, name);
@@ -728,6 +772,11 @@ async function adminPost(env, ctx, request, path, url, user) {
         is_featured: b.is_featured === '1' || b.is_featured === 'on' || b.is_featured === true,
         status: b.status || 'published',
         sort_order: Number(b.sort_order) || 0,
+        name_en: String(b.name_en || '').trim(),
+        description_en: String(b.description_en || '').trim(),
+        tags_en: String(b.tags_en || '').trim(),
+        review_md: String(b.review_md || ''),
+        review_md_en: String(b.review_md_en || ''),
       });
       await logAudit(env.DB, user.email, 'tool.update', 'tool', id, name);
       return redirect(`/admin/tools/${id}/edit?ok=${encodeURIComponent('已保存')}`);
@@ -759,6 +808,7 @@ async function adminPost(env, ctx, request, path, url, user) {
         name_en: String(b.name_en || ''),
         icon: b.icon || 'grid',
         description: String(b.description || ''),
+        description_en: String(b.description_en || ''),
         sort_order: Number(b.sort_order) || 0,
         visible: b.visible === '1' || b.visible === 'on' || b.visible === true,
       });
@@ -788,6 +838,7 @@ async function adminPost(env, ctx, request, path, url, user) {
         name_en: String(b.name_en || ''),
         icon: b.icon || 'grid',
         description: String(b.description || ''),
+        description_en: String(b.description_en || ''),
         sort_order: Number(b.sort_order) || 0,
         visible: b.visible === '1' || b.visible === 'on' || b.visible === true,
       });
@@ -843,32 +894,6 @@ async function adminPost(env, ctx, request, path, url, user) {
     await deleteSubmission(env.DB, id);
     await logAudit(env.DB, user.email, 'submission.delete', 'submission', id, s.name);
     return redirect(`/admin/submissions?ok=${encodeURIComponent('已删除提交记录')}`);
-  }
-
-  // import --------------------------------------------------------------
-  if (path === '/admin/import') {
-    let csvText = '';
-    if (type.includes('multipart/form-data')) {
-      const fd = await request.formData();
-      const pasted = fd.get('csv');
-      const file = fd.get('file');
-      if (typeof pasted === 'string' && pasted.trim()) csvText = pasted;
-      else if (file && typeof file === 'object' && file.text) csvText = await file.text();
-    } else {
-      const b = await getBody();
-      csvText = String(b.csv || '');
-    }
-
-    if (!csvText.trim()) {
-      return html(importPage({
-        user, env, csvTemplate: CSV_TEMPLATE,
-        flash: { type: 'error', message: '请上传 CSV 文件或粘贴内容' },
-      }));
-    }
-    const result = await importToolsCSV(env.DB, csvText);
-    await logAudit(env.DB, user.email, 'tools.import', 'tool', null,
-      `新增 ${result.inserted} / 更新 ${result.updated} / 跳过 ${result.skipped}`);
-    return html(importPage({ user, env, flash: null, result, csvTemplate: CSV_TEMPLATE }));
   }
 
   // audit ---------------------------------------------------------------
