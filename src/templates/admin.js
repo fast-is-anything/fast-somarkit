@@ -460,6 +460,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
     ${flash ? `<div class="ad-alert ad-alert-${esc(flash.type)}" id="adFlash" data-message="1">${esc(flash.message)}</div>` : ''}
     <form method="post" action="${isNew ? '/admin/tools' : `/admin/tools/${t.id}`}">
       <div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px" class="form-grid">
+        <div>
         <div class="ad-card">
           <div class="ad-card-head">
             <h2>基础信息</h2><span class="spacer"></span>
@@ -507,8 +508,43 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
           </div>
         </div>
 
+          <div class="ad-card">
+            <div class="ad-card-head">
+              <h2>评测正文</h2><span class="spacer"></span>
+              <span class="an-note">Markdown · 中英双语</span>
+              <button class="ad-btn ad-btn-sm ad-btn-primary" type="button" data-md-open>${UI.edit}打开编辑器</button>
+            </div>
+            <div class="ad-card-body">
+              <div class="ad-hint" style="margin-bottom:12px">
+                评测正文显示在详情页的产品卡片与信息卡片之间，支持标题、列表、表格、图片。
+              </div>
+              <!-- One block per language so a missing translation is obvious. -->
+              <div class="ad-md-block">
+                <div class="ad-md-lang-row">
+                  <span class="ad-md-lang-tag">中文</span>
+                  <div class="ad-hint" data-md-status="zh"></div>
+                  <span class="spacer"></span>
+                  <button class="ad-btn ad-btn-sm ad-btn-ghost" type="button" data-md-open>编辑</button>
+                </div>
+                <pre class="ad-md-preview" id="mdPreviewZh" aria-label="中文 Markdown 预览（前 10 行）"></pre>
+              </div>
+
+              <div class="ad-md-block">
+                <div class="ad-md-lang-row">
+                  <span class="ad-md-lang-tag">English</span>
+                  <div class="ad-hint" data-md-status="en"></div>
+                  <span class="spacer"></span>
+                  <button class="ad-btn ad-btn-sm ad-btn-ghost" type="button" data-md-open>编辑</button>
+                </div>
+                <pre class="ad-md-preview" id="mdPreviewEn" aria-label="English Markdown 预览（前 10 行）"></pre>
+              </div>
+              <div class="ad-hint" id="mdMore" hidden></div>
+            </div>
+          </div>
+        </div>
+
         <div>
-          <div class="ad-card" style="margin-bottom:16px">
+          <div class="ad-card">
             <div class="ad-card-head"><h2>归属与状态</h2></div>
             <div class="ad-card-body">
               <div class="ad-field">
@@ -533,28 +569,6 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
             </div>
           </div>
 
-          <div class="ad-card" style="margin-bottom:16px">
-            <div class="ad-card-head">
-              <h2>评测正文</h2><span class="spacer"></span>
-              <button class="ad-btn ad-btn-sm ad-btn-primary" type="button" data-md-open>${UI.edit}打开编辑器</button>
-            </div>
-            <div class="ad-card-body">
-              <!-- One summary per language so a missing translation is obvious. -->
-              <div class="ad-md-lang-row">
-                <span class="ad-md-lang-tag">中文</span>
-                <div class="ad-hint" data-md-status="zh"></div>
-              </div>
-              <pre class="ad-md-preview" id="mdPreviewZh" aria-label="中文 Markdown 预览（前 10 行）"></pre>
-
-              <div class="ad-md-lang-row" style="margin-top:14px">
-                <span class="ad-md-lang-tag">English</span>
-                <div class="ad-hint" data-md-status="en"></div>
-              </div>
-              <pre class="ad-md-preview" id="mdPreviewEn" aria-label="English Markdown 预览（前 10 行）"></pre>
-              <div class="ad-hint" id="mdMore" hidden></div>
-            </div>
-          </div>
-
           <div class="ad-card">
             <div class="ad-card-head"><h2>展示标记</h2></div>
             <div class="ad-card-body">
@@ -570,7 +584,39 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
             </div>
           </div>
 
-          <div class="ad-card" style="margin-top:16px">
+          <!-- Per-tool SEO switches. An unchecked checkbox is simply absent
+               from the POST body, so each one is expressed as "is it the
+               non-default state?" rather than a plain boolean. -->
+          <div class="ad-card">
+            <div class="ad-card-head"><h2>SEO 设置</h2></div>
+            <div class="ad-card-body">
+              <label class="ad-check">
+                <input type="checkbox" name="nofollow" value="1" ${t.nofollow === 0 ? '' : 'checked'}>
+                外链加 nofollow
+              </label>
+              <div class="ad-hint" style="margin:2px 0 14px">
+                开启后卡片与详情页的官网链接不传递权重。合作方或自家产品可关闭。
+              </div>
+
+              <label class="ad-check">
+                <input type="checkbox" name="noindex" value="1" ${t.noindex === 1 ? 'checked' : ''}>
+                页面 noindex
+              </label>
+              <div class="ad-hint" style="margin:2px 0 14px">
+                详情页加入 <code>noindex</code>，搜索引擎不再收录（同时自动移出 sitemap）。
+              </div>
+
+              <label class="ad-check">
+                <input type="checkbox" name="in_sitemap" value="1" ${t.in_sitemap === 0 ? '' : 'checked'}>
+                收录到 sitemap
+              </label>
+              <div class="ad-hint" style="margin-top:2px">
+                出现在 /sitemap.xml。已 noindex 的页面无论如何都不会写入。
+              </div>
+            </div>
+          </div>
+
+          <div class="ad-card">
             <div class="ad-card-head"><h2>Logo</h2></div>
             <div class="ad-card-body">
               <!-- Upload to R2, or paste an external URL. Both feed logo_url. -->
@@ -615,7 +661,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
           </div>
           <span class="ad-md-count" id="mdCount">0 行 · 0 字</span>
           <span class="spacer"></span>
-          <span class="ad-md-hint"># 标题 · **粗体** · - 列表 · &gt; 引用 · [链接](url) · | 表格 |</span>
+          <span class="ad-md-hint">支持卡片：::: tip 标题 / ::: warning / ::: info / ::: card …（以单独一行 ::: 结束）</span>
           <button class="ad-btn ad-btn-sm" type="button" data-md-close>取消</button>
           <button class="ad-btn ad-btn-sm ad-btn-primary" type="button" data-md-save>保存</button>
         </div>
@@ -801,30 +847,45 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
           if (count) count.textContent = lines + ' 行 · ' + v.trim().length + ' 字';
         }
 
-        /* Lightweight live preview for the language being edited. The
-           authoritative render happens server-side on save. */
-        function esc(s) {
-          // Backtick written as \x60: a literal one would terminate the outer
-          // template literal that builds this page.
-          return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-            .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
-            .replace(/\\x60([^\\x60]+)\\x60/g, '<code>$1</code>');
-        }
+        /* Live preview.
+         *
+         * The HTML comes from the SERVER'S renderer (/admin/api/render), which is
+         * the same code that renders the public detail page. A client-side
+         * approximation would drift — the old one ignored tables, links, images
+         * and inline formatting entirely.
+         *
+         * Requests are debounced, and a sequence number discards out-of-order
+         * responses so fast typing cannot flash older content.
+         */
+        var previewSeq = 0;
+        var previewTimer = null;
 
         function renderLive() {
           var src = currentEditor() ? currentEditor().value : '';
-          if (!src.trim()) { live.innerHTML = '<p class="is-empty">预览将在这里显示</p>'; return; }
-          var html = src.split('\\n').map(function(line){
-            var l = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            if (/^\\s*$/.test(l)) return '';
-            var h = l.match(/^\\s{0,3}(#{1,6})\\s+(.*)$/);
-            if (h) { var lv = Math.min(6, h[1].length + 1); return '<h' + lv + '>' + esc(h[2]) + '</h' + lv + '>'; }
-            if (/^\\s*([-*+]|\\d+\\.)\\s+/.test(l)) return '<li>' + esc(l.replace(/^\\s*([-*+]|\\d+\\.)\\s+/, '')) + '</li>';
-            if (/^\\s*>/.test(l)) return '<blockquote>' + esc(l.replace(/^\\s*>\\s?/, '')) + '</blockquote>';
-            if (/^\\s*\\x60\\x60\\x60/.test(l)) return '<hr>';
-            return '<p>' + esc(l) + '</p>';
-          }).join('');
-          live.innerHTML = html;
+          if (!src.trim()) {
+            live.innerHTML = '<p class="is-empty">预览将在这里显示</p>';
+            return;
+          }
+          var seq = ++previewSeq;
+          clearTimeout(previewTimer);
+          previewTimer = setTimeout(function(){
+            fetch('/admin/api/render', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ md: src }),
+            })
+              .then(function(r){ return r.json(); })
+              .then(function(res){
+                // Ignore a stale response (user kept typing).
+                if (seq !== previewSeq) return;
+                if (res && res.ok) live.innerHTML = res.html || '<p class="is-empty">预览将在这里显示</p>';
+                else live.innerHTML = '<p class="is-empty">预览不可用</p>';
+              })
+              .catch(function(){
+                if (seq === previewSeq) live.innerHTML = '<p class="is-empty">预览请求失败</p>';
+              });
+          }, 180);
         }
 
         function switchLang(code) {
@@ -930,8 +991,11 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
 
         if (imgInput) imgInput.addEventListener('change', function(){ uploadToReview(imgInput.files && imgInput.files[0]); });
 
-        var openBtn = document.querySelector('[data-md-open]');
-        if (openBtn) openBtn.addEventListener('click', function(){ open(); });
+        // Several entry points (card header + one per language block) all open
+        // the same editor.
+        document.querySelectorAll('[data-md-open]').forEach(function(b){
+          b.addEventListener('click', function(){ open(); });
+        });
         document.querySelectorAll('[data-md-close]').forEach(function(b){ b.addEventListener('click', function(){ close(false); }); });
         document.querySelectorAll('[data-md-save]').forEach(function(b){ b.addEventListener('click', function(){ close(true); }); });
         document.addEventListener('keydown', function(e){
@@ -1362,7 +1426,7 @@ export function submissionDetailPage({ user, env, s, flash }) {
           </div>
         </div>
 
-        <div class="ad-card" style="margin-top:16px">
+        <div class="ad-card">
           <div class="ad-card-head"><h2>元信息</h2></div>
           <div class="ad-card-body" style="font-size:12.5px;color:var(--ad-text-2);line-height:1.9">
             <div>提交人：${esc(contact)}</div>

@@ -1,203 +1,227 @@
 // -----------------------------------------------------------------------------
-// Minimal, dependency-free Markdown → HTML renderer.
+// Markdown → HTML, powered by markdown-it.
 //
-// Scope: exactly what an editorial tool review needs. Anything outside this
-// subset is escaped as plain text rather than passed through, so authoring
-// Markdown can never inject raw HTML into a page.
+// This is the single renderer used by BOTH the public detail page and the
+// admin editor preview, so an author always sees exactly what visitors get.
 //
-// Supported
-//   # ## ### headings          - / * / + and 1. lists (nested by 2 spaces)
-//   **bold**  *italic*  `code` [text](url)  ![alt](url)
-//   > blockquote               --- horizontal rule
-//   ``` fenced code blocks ``` |> tables
-//   blank-line separated paragraphs, single newlines become <br>
+// Beyond CommonMark + GFM tables it adds:
+//   • ::: tip / ::: warning / ::: card    — callout cards
+//   • footnotes                           — via markdown-it-footnote
+//   • heading anchors (slug ids)          — good for SEO and in-page links
+//   • link hardening                      — only http(s)/mailto/relative links
+//
+// Raw HTML in the source is disabled (`html: false`), so authoring Markdown can
+// never inject <script> or event handlers.
 // -----------------------------------------------------------------------------
 
+import MarkdownIt from 'markdown-it';
+import container from 'markdown-it-container';
+import footnote from 'markdown-it-footnote';
 import { esc } from './crypto.js';
 
-/** Only allow http(s), mailto and site-relative links in rendered output. */
-function safeUrl(raw) {
-  const url = String(raw || '').trim();
-  if (!url) return '';
-  if (/^(https?:\/\/|mailto:|\/|#)/i.test(url)) return url;
-  // Anything else (javascript:, data:, vbscript:, …) is dropped.
+/**
+ * Callout containers. `::: tip 可选标题` opens a card; the following lines are
+ * rendered as normal Markdown inside it, closed by a bare `:::`.
+ *
+ * `info` in the source is the text after the container name and is used as the
+ * card title when present.
+ */
+const CALLOUTS = {
+  tip: { cls: 'md-card md-card-tip', icon: '💡' },
+  warning: { cls: 'md-card md-card-warn', icon: '⚠️' },
+  info: { cls: 'md-card md-card-info', icon: 'ℹ️' },
+  card: { cls: 'md-card', icon: '' },
+};
+
+/**
+ * Profile card. The info string carries `key=value` pairs:
+ *
+ *   ::: person name=张三 role=产品设计师 avatar=https://…/a.png
+ *   简介文字（Markdown）
+ *   :::
+ *
+ * `avatar` is optional — without it the card falls back to initials, so an
+ * author never has to hunt for an image to get a decent-looking card.
+ */
+function personCard(tokens, idx) {
+  const info = tokens[idx].info.trim().slice('person'.length).trim();
+  const attrs = {};
+  for (const m of info.matchAll(/(\w+)\s*=\s*("([^"]*)"|'([^']*)'|(\S+))/g)) {
+    attrs[m[1].toLowerCase()] = m[3] ?? m[4] ?? m[5] ?? '';
+  }
+
+  if (tokens[idx].nesting !== 1) return '</div></div>';
+
+  const name = attrs.name || '';
+  const role = attrs.role || '';
+  const avatar = safeUrl(attrs.avatar || '');
+  const url = safeUrl(attrs.url || '');
+
+  // Avatar: image when supplied, otherwise the first character of the name.
+  const initial = name ? [...name][0] : '?';
+  const avatarHtml = avatar
+    ? `<img class="md-person-avatar" src="${esc(avatar)}" alt="" loading="lazy" decoding="async">`
+    : `<span class="md-person-avatar md-person-avatar-text" aria-hidden="true">${esc(initial)}</span>`;
+
+  const head = `<div class="md-person-top">${avatarHtml}<div class="md-person-meta">`
+    + (name ? `<div class="md-person-name">${esc(name)}</div>` : '')
+    + (role ? `<div class="md-person-role">${esc(role)}</div>` : '')
+    + '</div></div>';
+
+  // The whole card becomes a link when `url=` is given.
+  const open = url
+    ? `<div class="md-card md-person"><a class="md-person-link" href="${url}" target="_blank" rel="noopener noreferrer nofollow">`
+    : '<div class="md-card md-person">';
+
+  return `${open}${head}<div class="md-person-body">`;
+}
+
+/** Only these link schemes survive; everything else is dropped to plain text. */
+function safeUrl(url) {
+  const u = String(url || '').trim();
+  if (!u) return '';
+  if (/^(https?:\/\/|mailto:|\/|#)/i.test(u)) return u;
   return '';
 }
 
-/** Inline formatting: code spans first so their contents stay literal. */
-function inline(text) {
-  const codes = [];
-  let s = String(text).replace(/`([^`]+)`/g, (_, code) => {
-    codes.push(`<code>${esc(code)}</code>`);
-    return `\u0000${codes.length - 1}\u0000`;
-  });
-
-  s = esc(s);
-
-  // Images before links (same leading syntax for links).
-  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g, (m, alt, src, title) => {
-    const u = safeUrl(src);
-    if (!u) return m;
-    const t = title ? ` title="${title}"` : '';
-    return `<img src="${u}" alt="${alt}"${t} loading="lazy" decoding="async">`;
-  });
-
-  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g, (m, label, href, title) => {
-    const u = safeUrl(href);
-    if (!u) return label;
-    const external = /^https?:\/\//i.test(u);
-    const attrs = external ? ' target="_blank" rel="noopener noreferrer nofollow"' : '';
-    const t = title ? ` title="${title}"` : '';
-    return `<a href="${u}"${attrs}${t}>${label}</a>`;
-  });
-
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
-
-  // Restore code spans.
-  s = s.replace(/\u0000(\d+)\u0000/g, (_, i) => codes[Number(i)]);
-  return s;
+/** Turn a heading's text into a stable, readable anchor id. */
+function slugifyHeading(text) {
+  return String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/<[^>]+>/g, '')
+    .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'section';
 }
 
-/** Split a table row into cells, honouring escaped pipes. */
-function tableCells(line) {
-  return line
-    .replace(/^\s*\|/, '')
-    .replace(/\|\s*$/, '')
-    .split(/(?<!\\)\|/)
-    .map((c) => c.trim().replace(/\\\|/g, '|'));
+let mdInstance = null;
+
+function getMd() {
+  if (mdInstance) return mdInstance;
+
+  const md = new MarkdownIt({
+    html: false,        // never pass raw HTML through
+    linkify: true,      // bare URLs become links
+    breaks: false,      // CommonMark: single newline is not a <br>
+    typographer: false, // keep quotes/ellipses literal for CJK text
+  });
+
+  md.use(footnote);
+
+  // Heading anchors (slug instead of URL-encoded ids).
+  md.use((instance) => {
+    instance.core.ruler.push('heading_anchors', (state) => {
+      const seen = new Map();
+      for (const token of state.tokens) {
+        if (token.type !== 'heading_open') continue;
+        if (!token.attrGet('id')) {
+          const idx = state.tokens.indexOf(token);
+          const inline = state.tokens[idx + 1];
+          const text = inline && inline.type === 'inline' ? inline.content : '';
+          let base = slugifyHeading(text);
+          const n = (seen.get(base) || 0) + 1;
+          seen.set(base, n);
+          if (n > 1) base = `${base}-${n}`;
+          token.attrSet('id', base);
+        }
+        token.attrSet('tabindex', '-1');
+      }
+    });
+  });
+
+  // Callout cards.
+  for (const [name, cfg] of Object.entries(CALLOUTS)) {
+    md.use(container, name, {
+      validate: (params) => params.trim().startsWith(name),
+      render(tokens, idx) {
+        if (tokens[idx].nesting === 1) {
+          // `::: tip Some title` → title = "Some title"
+          const title = tokens[idx].info.trim().slice(name.length).trim();
+          const icon = cfg.icon ? `<span class="md-card-icon" aria-hidden="true">${cfg.icon}</span>` : '';
+          const head = title
+            ? `<div class="md-card-head">${icon}<span class="md-card-title">${esc(title)}</span></div>`
+            : (icon ? `<div class="md-card-head">${icon}</div>` : '');
+          return `<div class="${cfg.cls}">${head}`;
+        }
+        return '</div>';
+      },
+    });
+  }
+
+  // Profile card with avatar.
+  md.use(container, 'person', {
+    validate: (params) => params.trim().startsWith('person'),
+    render: personCard,
+  });
+
+  // Link/image hardening: drop unsafe schemes, mark external links.
+  const defaultLinkOpen = md.renderer.rules.link_open
+    || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
+  md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const href = token.attrGet('href') || '';
+    const safe = safeUrl(href);
+    if (!safe) {
+      // Unwrap: render the text only.
+      token.tag = 'span';
+      return defaultLinkOpen(tokens, idx, options, env, self);
+    }
+    token.attrSet('href', safe);
+    if (/^https?:\/\//i.test(safe)) {
+      token.attrSet('target', '_blank');
+      token.attrSet('rel', 'noopener noreferrer nofollow');
+    }
+    return defaultLinkOpen(tokens, idx, options, env, self);
+  };
+
+  md.renderer.rules.image = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const src = token.attrGet('src') || '';
+    const safe = safeUrl(src);
+    if (!safe) return '';
+    token.attrSet('src', safe);
+    token.attrSet('loading', 'lazy');
+    token.attrSet('decoding', 'async');
+    return self.renderToken(tokens, idx, options);
+  };
+
+  // Tables get a scroll container so wide tables never break the layout.
+  const defaultTableOpen = md.renderer.rules.table_open
+    || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
+  md.renderer.rules.table_open = (tokens, idx, options, env, self) =>
+    `<div class="md-table-wrap">${defaultTableOpen(tokens, idx, options, env, self)}`;
+  const defaultTableClose = md.renderer.rules.table_close
+    || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
+  md.renderer.rules.table_close = (tokens, idx, options, env, self) =>
+    `${defaultTableClose(tokens, idx, options, env, self)}</div>`;
+
+  mdInstance = md;
+  return md;
 }
 
 /**
  * Render Markdown to HTML.
- * @param {string} md raw Markdown from the editor
- * @returns {string} HTML (already escaped/safe)
+ * @param {string} source raw Markdown
+ * @returns {string} HTML (escaped/sanitised by the renderer configuration)
  */
-export function renderMarkdown(md) {
-  const src = String(md || '').replace(/\r\n?/g, '\n');
+export function renderMarkdown(source) {
+  const src = String(source || '').replace(/\r\n?/g, '\n');
   if (!src.trim()) return '';
-
-  const lines = src.split('\n');
-  const out = [];
-  let i = 0;
-
-  // --- helpers -----------------------------------------------------------
-  const isBlank = (l) => !l || !l.trim();
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    if (isBlank(line)) { i++; continue; }
-
-    // Fenced code block ---------------------------------------------------
-    const fence = line.match(/^\s*(```|~~~)\s*([\w-]*)\s*$/);
-    if (fence) {
-      const marker = fence[1];
-      const lang = fence[2];
-      const buf = [];
-      i++;
-      while (i < lines.length && !lines[i].trim().startsWith(marker)) {
-        buf.push(lines[i]);
-        i++;
-      }
-      i++; // consume closing fence
-      const cls = lang ? ` class="language-${esc(lang)}"` : '';
-      out.push(`<pre><code${cls}>${esc(buf.join('\n'))}</code></pre>`);
-      continue;
-    }
-
-    // Table ---------------------------------------------------------------
-    if (/\|/.test(line) && i + 1 < lines.length && /^\s*\|?[\s:-]*-[\s:|-]*\|?\s*$/.test(lines[i + 1]) && lines[i + 1].includes('-')) {
-      const head = tableCells(line);
-      i += 2; // header + separator
-      const body = [];
-      while (i < lines.length && /\|/.test(lines[i]) && !isBlank(lines[i])) {
-        body.push(tableCells(lines[i]));
-        i++;
-      }
-      const th = head.map((c) => `<th>${inline(c)}</th>`).join('');
-      const rows = body
-        .map((cells) => `<tr>${head.map((_, k) => `<td>${inline(cells[k] || '')}</td>`).join('')}</tr>`)
-        .join('');
-      out.push(`<div class="md-table-wrap"><table><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`);
-      continue;
-    }
-
-    // Horizontal rule -----------------------------------------------------
-    if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) {
-      out.push('<hr>');
-      i++;
-      continue;
-    }
-
-    // Heading -------------------------------------------------------------
-    const h = line.match(/^\s{0,3}(#{1,6})\s+(.*)$/);
-    if (h) {
-      const level = Math.min(6, Math.max(2, h[1].length + 1)); // # -> h2 (page already has an h1)
-      out.push(`<h${level}>${inline(h[2].trim())}</h${level}>`);
-      i++;
-      continue;
-    }
-
-    // Blockquote ----------------------------------------------------------
-    if (/^\s*>\s?/.test(line)) {
-      const buf = [];
-      while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
-        buf.push(lines[i].replace(/^\s*>\s?/, ''));
-        i++;
-      }
-      out.push(`<blockquote>${renderMarkdown(buf.join('\n'))}</blockquote>`);
-      continue;
-    }
-
-    // Lists ---------------------------------------------------------------
-    if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {
-      const ordered = /^\s*\d+\.\s+/.test(line);
-      const items = [];
-      while (i < lines.length) {
-        const m = lines[i].match(/^\s*([-*+]|\d+\.)\s+(.*)$/);
-        if (!m) {
-          // A continuation line (indented) belongs to the previous item.
-          if (items.length && /^\s{2,}\S/.test(lines[i])) {
-            items[items.length - 1] += ' ' + lines[i].trim();
-            i++;
-            continue;
-          }
-          break;
-        }
-        items.push(m[2]);
-        i++;
-      }
-      const tag = ordered ? 'ol' : 'ul';
-      out.push(`<${tag}>${items.map((it) => `<li>${inline(it)}</li>`).join('')}</${tag}>`);
-      continue;
-    }
-
-    // Paragraph -----------------------------------------------------------
-    const buf = [];
-    while (i < lines.length && !isBlank(lines[i])
-      && !/^\s*(#{1,6}\s|>|```|~~~)/.test(lines[i])
-      && !/^\s*([-*+]|\d+\.)\s+/.test(lines[i])
-      && !/^\s*([-*_])\s*(\1\s*){2,}$/.test(lines[i])) {
-      buf.push(lines[i]);
-      i++;
-    }
-    if (!buf.length) { i++; continue; }
-    // Single newlines inside a paragraph are intentional line breaks.
-    out.push(`<p>${buf.map((l) => inline(l)).join('<br>')}</p>`);
-  }
-
-  return out.join('\n');
+  return getMd().render(src);
 }
 
 /** Rough plain-text excerpt, used for meta descriptions and previews. */
-export function markdownToText(md, max = 160) {
-  const text = String(md || '')
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/[#>*_`~|-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+export function markdownToText(source, max = 160) {
+  const src = String(source || '').replace(/\r\n?/g, '\n');
+  if (!src.trim()) return '';
+  // Strip markup by rendering then flattening, which handles every construct.
+  const html = renderMarkdown(src)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&[a-z]+;/gi, ' ');
+  const text = html.replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
+
+/** Exposed for the editor's syntax hint. */
+export const MARKDOWN_CALLOUTS = Object.keys(CALLOUTS);

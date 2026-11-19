@@ -1084,24 +1084,27 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 .empty-state h3 { margin: 0 0 6px; font-size: var(--text-base); color: var(--text-secondary); }
 .empty-state p { margin: 0; font-size: var(--text-sm); }
 
-/* Tool detail page */
-.detail-wrap { max-width: 860px; margin: 0 auto; padding: 32px 24px 80px; }
+/* Tool detail page.
+   Same measure as the homepage content column (.content-area: 1200px, centred,
+   24px gutters) so navigating between the list and a tool page keeps the text
+   aligned on one visual column. */
+.detail-wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
 .detail-card {
   background: var(--bg-card); border: 1px solid var(--border-color);
   border-radius: var(--radius-xl); padding: 28px;
 }
-/* Primary CTA row at the bottom of the detail card. Left-aligned so it lines
-   up with the description and tag list above it. */
+/* Primary CTA row: sits right under the product summary (tags), followed by the
+   disclaimer. Left-aligned so it lines up with the text above it. */
 .detail-cta {
   display: flex;
   justify-content: flex-start;
 }
-/* Legal footnote under the CTA. Deliberately quiet — small, muted and on its
-   own line — so it never competes with the button but stays legible. */
+/* Legal footnote under the CTA. Deliberately quiet — small and muted — so it
+   never competes with the button. The divider above the CTA already separates
+   this block from the article, so there is no second rule here. */
 .detail-disclaimer {
   margin: 14px 0 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-color);
+  padding-top: 0;
   font-size: var(--text-xs);
   line-height: 1.7;
   color: var(--text-tertiary);
@@ -1112,17 +1115,23 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
    Editorial review body (Markdown), rendered between the product card and the
    key-facts row.
    -------------------------------------------------------------------------- */
+/* Long-form review.
+   It now lives INSIDE .detail-card (product info and the article read as one
+   card), so it carries no card chrome of its own — just body typography. */
 .detail-review {
-  margin-top: 20px;
-  padding: 26px 28px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
   font-size: var(--text-base);
   line-height: 1.85;
   color: var(--text-secondary);
   /* Long URLs / code never widen the column. */
   overflow-wrap: break-word;
+}
+/* Hairline separator between the product summary (with its CTA and disclaimer)
+   and the long-form article below. */
+.detail-divider {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--border-color);
+  margin: 28px 0;
 }
 .detail-review > :first-child { margin-top: 0; }
 .detail-review > :last-child { margin-bottom: 0; }
@@ -1193,6 +1202,99 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   text-align: left;
 }
 .detail-review th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
+
+/* --------------------------------------------------------------------------
+   Callout cards from the ::: tip / ::: warning / ::: info / ::: card
+   containers. They break the wall of text without leaving plain Markdown.
+   -------------------------------------------------------------------------- */
+.detail-review .md-card {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+.detail-review .md-card > :last-child { margin-bottom: 0; }
+.detail-review .md-card-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+  font-size: var(--text-sm); font-weight: 600;
+  color: var(--text-primary);
+}
+.detail-review .md-card-icon { font-size: 15px; line-height: 1; }
+.detail-review .md-card-title { letter-spacing: -.01em; }
+/* Variants: a tinted background plus a matching left rail. */
+.detail-review .md-card-tip {
+  background: #F0FDF4; border-color: #BBF7D0; border-left: 3px solid #22C55E;
+}
+.detail-review .md-card-warn {
+  background: #FFFBEB; border-color: #FDE68A; border-left: 3px solid #F59E0B;
+}
+.detail-review .md-card-info {
+  background: #EFF6FF; border-color: #BFDBFE; border-left: 3px solid #3B82F6;
+}
+[data-theme="dark"] .detail-review .md-card-tip {
+  background: rgba(34, 197, 94, .1); border-color: rgba(34, 197, 94, .3);
+}
+[data-theme="dark"] .detail-review .md-card-warn {
+  background: rgba(245, 158, 11, .1); border-color: rgba(245, 158, 11, .3);
+}
+[data-theme="dark"] .detail-review .md-card-info {
+  background: rgba(59, 130, 246, .1); border-color: rgba(59, 130, 246, .3);
+}
+/* Footnotes */
+.detail-review .footnotes {
+  margin-top: 24px; padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+  font-size: var(--text-sm); color: var(--text-tertiary);
+}
+/* --------------------------------------------------------------------------
+   Profile card (::: person name=… role=… avatar=…)
+   A compact author/identity card: avatar, name, role, then free Markdown.
+   -------------------------------------------------------------------------- */
+.detail-review .md-person { padding: 0; overflow: hidden; }
+.detail-review .md-person-link {
+  display: block; padding: 16px 18px 6px;
+  color: inherit; text-decoration: none;
+  transition: background-color var(--transition-fast);
+}
+.detail-review .md-person-link:hover { background: var(--bg-card-hover); }
+.detail-review .md-person-top {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 18px;
+}
+.detail-review .md-person-link .md-person-top { padding: 0 0 10px; }
+.detail-review .md-person-avatar {
+  width: 48px; height: 48px; flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+}
+.detail-review .md-person-avatar-text {
+  display: grid; place-items: center;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 18px; font-weight: 600;
+}
+.detail-review .md-person-meta { min-width: 0; }
+.detail-review .md-person-name {
+  font-size: var(--text-base); font-weight: 600; color: var(--text-primary);
+  line-height: 1.35;
+}
+.detail-review .md-person-role {
+  font-size: var(--text-sm); color: var(--text-tertiary);
+  margin-top: 2px;
+}
+.detail-review .md-person-body {
+  padding: 0 18px 16px;
+  font-size: var(--text-sm); color: var(--text-secondary);
+}
+.detail-review .md-person-link .md-person-body { padding: 0; }
+.detail-review .md-person-body > :last-child { margin-bottom: 0; }.detail-review .footnotes-list { padding-left: 1.2em; }
+.detail-review .footnote-ref a { text-decoration: none; }
+.detail-review .footnote-backref { text-decoration: none; margin-left: 4px; }
+/* Heading anchors keep a stable id but should not look like links. */
+.detail-review h2[id], .detail-review h3[id] { scroll-margin-top: 80px; }
 .tool-info-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

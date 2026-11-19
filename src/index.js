@@ -16,6 +16,7 @@ import {
 import { sendClickToGa } from './lib/ga.js';
 import { gaDailySeries, isGaConfigured } from './lib/ga-report.js';
 import { storeUpload, deleteMedia, ACCEPT_ATTR, MAX_LABEL } from './lib/media.js';
+import { renderMarkdown } from './lib/markdown.js';
 import {
   localizeTool, localizeTools, localizeCategory, localizeCategories,
 } from './lib/localize.js';
@@ -338,7 +339,9 @@ function sitemap(categories, tools) {
     `<url><loc>${base}/about</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>`,
     ...categories.map((c) =>
       `<url><loc>${base}/${c.slug}</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>`),
-    ...tools.map((t) =>
+    // A tool can be excluded from the sitemap on its own, and a noindex page
+    // must never be advertised in the sitemap either.
+    ...tools.filter((t) => t.in_sitemap !== 0 && t.noindex !== 1).map((t) =>
       `<url><loc>${base}/tools/${t.slug}</loc><lastmod>${String(t.updated_at).slice(0, 10)}</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>`),
   ];
   return new Response(
@@ -510,6 +513,21 @@ async function handleAdmin(request, env, ctx, path, url, theme) {
       return json({ ok: true, key: result.key, url: result.url, bytes: result.bytes });
     } catch (err) {
       return json({ ok: false, error: String(err && err.message || err) }, 500);
+    }
+  }
+
+  // Markdown preview for the editor. It runs the SAME renderer the public site
+  // uses, so what the author sees while typing is exactly what visitors get —
+  // the old client-side preview only handled headings and lists.
+  if (path === '/admin/api/render' && method === 'POST') {
+    try {
+      const body = await request.json();
+      const md = String((body && body.md) || '');
+      // Guard against accidental huge payloads (the editor autosaves locally).
+      if (md.length > 200_000) return json({ ok: false, error: '内容过长' }, 413);
+      return json({ ok: true, html: renderMarkdown(md) });
+    } catch (err) {
+      return json({ ok: false, error: String(err && err.message || err) }, 400);
     }
   }
 
@@ -726,6 +744,9 @@ async function adminPost(env, ctx, request, path, url, user) {
         is_hot: b.is_hot === '1' || b.is_hot === 'on' || b.is_hot === true,
         is_new: b.is_new === '1' || b.is_new === 'on' || b.is_new === true,
         is_featured: b.is_featured === '1' || b.is_featured === 'on' || b.is_featured === true,
+        nofollow: b.nofollow === '1' || b.nofollow === 'on' || b.nofollow === true,
+        noindex: b.noindex === '1' || b.noindex === 'on' || b.noindex === true,
+        in_sitemap: b.in_sitemap === '1' || b.in_sitemap === 'on' || b.in_sitemap === true,
         status: b.status || 'published',
         sort_order: Number(b.sort_order) || 0,
         name_en: String(b.name_en || '').trim(),
@@ -770,6 +791,9 @@ async function adminPost(env, ctx, request, path, url, user) {
         is_hot: b.is_hot === '1' || b.is_hot === 'on' || b.is_hot === true,
         is_new: b.is_new === '1' || b.is_new === 'on' || b.is_new === true,
         is_featured: b.is_featured === '1' || b.is_featured === 'on' || b.is_featured === true,
+        nofollow: b.nofollow === '1' || b.nofollow === 'on' || b.nofollow === true,
+        noindex: b.noindex === '1' || b.noindex === 'on' || b.noindex === true,
+        in_sitemap: b.in_sitemap === '1' || b.in_sitemap === 'on' || b.in_sitemap === true,
         status: b.status || 'published',
         sort_order: Number(b.sort_order) || 0,
         name_en: String(b.name_en || '').trim(),

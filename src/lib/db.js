@@ -255,10 +255,10 @@ export async function createTool(db, data) {
     .prepare(
       `INSERT INTO tools
         (slug, name, url, description, category_id, tags, pricing, logo_url,
-         is_hot, is_new, is_featured, status, sort_order,
+         is_hot, is_new, is_featured, nofollow, noindex, in_sitemap, status, sort_order,
          name_en, description_en, tags_en,
          review_md, review_md_en, source, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       data.slug,
@@ -272,6 +272,9 @@ export async function createTool(db, data) {
       data.is_hot ? 1 : 0,
       data.is_new ? 1 : 0,
       data.is_featured ? 1 : 0,
+      data.nofollow === false ? 0 : 1,
+      data.noindex ? 1 : 0,
+      data.in_sitemap === false ? 0 : 1,
       data.status || 'published',
       Number(data.sort_order) || 0,
       data.name_en || '',
@@ -290,7 +293,8 @@ export async function updateTool(db, id, data) {
   await db
     .prepare(
       `UPDATE tools SET slug=?, name=?, url=?, description=?, category_id=?, tags=?,
-        pricing=?, logo_url=?, is_hot=?, is_new=?, is_featured=?, status=?,
+        pricing=?, logo_url=?, is_hot=?, is_new=?, is_featured=?,
+        nofollow=?, noindex=?, in_sitemap=?, status=?,
         sort_order=?,
         name_en=?, description_en=?, tags_en=?,
         review_md=?, review_md_en=?, updated_at=? WHERE id=?`
@@ -307,6 +311,9 @@ export async function updateTool(db, id, data) {
       data.is_hot ? 1 : 0,
       data.is_new ? 1 : 0,
       data.is_featured ? 1 : 0,
+      data.nofollow === false ? 0 : 1,
+      data.noindex ? 1 : 0,
+      data.in_sitemap === false ? 0 : 1,
       data.status || 'published',
       Number(data.sort_order) || 0,
       data.name_en || '',

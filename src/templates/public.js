@@ -13,6 +13,19 @@ function brandMark() {
 }
 
 /**
+ * rel attribute for a tool's outbound links.
+ *
+ * `noopener noreferrer` is always present (security + privacy). `nofollow` is
+ * added unless the admin explicitly allowed following for this tool, so by
+ * default a directory never passes link equity to third-party sites.
+ */
+function outboundRel(tool) {
+  return tool && tool.nofollow === 0
+    ? 'noopener noreferrer'
+    : 'noopener noreferrer nofollow';
+}
+
+/**
  * Full-screen loader markup, toggled by `body.is-loading`.
  * Kept in the initial HTML (not injected) so it paints on the very first frame
  * of a document navigation instead of after the JS bundle runs.
@@ -59,7 +72,7 @@ function langSwitcher(lang, { mobile = false } = {}) {
   </div>`;
 }
 
-function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [], theme = 'light', lang = 'zh', gaId = '' }) {
+function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [], theme = 'light', lang = 'zh', gaId = '', noindex = false }) {
   const htmlLang = normalizeLang(lang) === 'en' ? 'en' : 'zh-CN';
   const ogLocale = normalizeLang(lang) === 'en' ? 'en_US' : 'zh_CN';
   return `<!DOCTYPE html>
@@ -70,7 +83,9 @@ function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
 <meta name="keywords" content="SoMarkIt,AI工具,AI导航,AI工具导航,ChatGPT,Claude,DeepSeek,AI绘画,AI视频,AI编程,AI写作,人工智能工具">
-<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="robots" content="${noindex
+  ? 'noindex, follow'
+  : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'}">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0B1120" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
@@ -202,7 +217,7 @@ function hero({ total, catCount, featured, lang = 'zh' }) {
         .map((tag) => `<span class="hero-agent-tag">${esc(tag)}</span>`)
         .join('');
       return `<a class="hero-agent-card hero-agent-accent-${i % 4}"
-          href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"
+          href="${esc(item.url)}" target="_blank" rel="${outboundRel(item)}"
           data-tool-id="${item.id}">
         <div class="hero-agent-head">
           <span class="hero-agent-name">${esc(item.name)}</span>
@@ -349,7 +364,7 @@ function toolCard(item, lang = 'zh') {
       <span class="pricing-tag pricing-${esc(item.pricing)}">${esc(pricingLabel(lang, item.pricing))}</span>
       <div class="tool-card-actions">
         <a href="/tools/${esc(item.slug)}" class="tool-detail-link" title="${esc(t(lang, 'card.review'))}">${esc(t(lang, 'card.review'))}</a>
-        <a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer nofollow"
+        <a href="${esc(item.url)}" target="_blank" rel="${outboundRel(item)}"
           class="tool-visit-btn" data-tool-id="${item.id}">${esc(t(lang, 'card.visit'))} <span class="arrow">→</span></a>
       </div>
     </div>
@@ -574,6 +589,8 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
     theme,
     lang,
     gaId,
+    // Per-tool switch: keeps the page out of the index but still follows links.
+    noindex: tool.noindex === 1,
   })}
 <body>
 <a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
@@ -598,7 +615,6 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
           </h1>
           <div class="detail-meta">
             <span class="pricing-tag pricing-${esc(tool.pricing)}">${esc(pricingLabel(lang, tool.pricing))}</span>
-              <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow" data-tool-id="${tool.id}">${esc(hostOf(tool.url))}</a>
             <span class="detail-meta-item">${esc(catName)}</span>
             <span class="detail-meta-item">${esc(t(lang, 'detail.visits', tool.visit_count))}</span>
           </div>
@@ -606,16 +622,17 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
         <div class="detail-body">${esc(tool.description || t(lang, 'card.noDesc'))}</div>
         ${tags ? `<div class="tool-tags" style="margin-bottom:24px">${tags}</div>` : ''}
         <div class="detail-cta">
-          <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow" class="nav-btn nav-btn-primary tool-visit-btn"
+          <a href="${esc(tool.url)}" target="_blank" rel="${outboundRel(tool)}" class="nav-btn nav-btn-primary tool-visit-btn"
             style="height:42px;padding:0 20px;font-size:var(--text-sm)" data-tool-id="${tool.id}">
             ${esc(t(lang, 'detail.visitSite'))} ${UI.externalLink}
           </a>
         </div>
         <p class="detail-disclaimer">${esc(t(lang, 'detail.disclaimer'))}</p>
+        ${reviewHtml ? `<div class="detail-divider" role="separator"></div>
+        <section class="detail-review" aria-label="${esc(t(lang, 'detail.reviewLabel'))}">
+          ${reviewHtml}
+        </section>` : ''}
       </div>
-      ${reviewHtml ? `<section class="detail-review" aria-label="${esc(t(lang, 'detail.reviewLabel'))}">
-        ${reviewHtml}
-      </section>` : ''}
       <div class="tool-info-grid">
         <div class="tool-info-card">
           <div class="info-label">${esc(t(lang, 'detail.infoCategory'))}</div>

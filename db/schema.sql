@@ -29,6 +29,17 @@ CREATE TABLE IF NOT EXISTS tools (
   is_hot          INTEGER NOT NULL DEFAULT 0,
   is_new          INTEGER NOT NULL DEFAULT 0,
   is_featured     INTEGER NOT NULL DEFAULT 0, -- shows in hero "trending" rail
+  -- ---------------------------------------------------------------------
+  -- Per-tool SEO switches, all editable from the admin tool form.
+  --   nofollow = 1  outbound links carry rel="nofollow" (default: a directory
+  --                 should not pass link equity to hundreds of third parties)
+  --   noindex  = 1  the detail page gets <meta name="robots" content="noindex">
+  --                 and is excluded from the sitemap
+  --   in_sitemap = 1 whether the detail page is listed in /sitemap.xml
+  -- ---------------------------------------------------------------------
+  nofollow        INTEGER NOT NULL DEFAULT 1,
+  noindex         INTEGER NOT NULL DEFAULT 0,
+  in_sitemap      INTEGER NOT NULL DEFAULT 1,
   status          TEXT    NOT NULL DEFAULT 'published', -- draft | published | archived
   sort_order      INTEGER NOT NULL DEFAULT 0,
   visit_count     INTEGER NOT NULL DEFAULT 0,
