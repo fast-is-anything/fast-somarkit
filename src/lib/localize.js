@@ -66,14 +66,21 @@ export function localizeTools(tools, lang) {
   return (Array.isArray(tools) ? tools : []).map((t) => localizeTool(t, lang));
 }
 
-/** Localise one category. */
+/**
+ * Localise one category.
+ * Same language-neutral rule as localizeTool: read `<field>_<code>` for any
+ * non-default locale, falling back to the default-language column.
+ */
 export function localizeCategory(category, lang) {
   if (!category) return category;
-  const en = normalizeLang(lang) === 'en';
+  const code = normalizeLang(lang);
+  const translated = code !== DEFAULT_LANG;
+  const forLang = (field) =>
+    (translated ? pick(category[`${field}_${code}`], category[field]) : pick(category[field]));
   return {
     ...category,
-    name: en ? pick(category.name_en, category.name) : pick(category.name),
-    description: en ? pick(category.description_en, category.description) : pick(category.description),
+    name: forLang('name'),
+    description: forLang('description'),
   };
 }
 

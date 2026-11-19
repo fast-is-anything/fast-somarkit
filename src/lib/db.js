@@ -2,6 +2,32 @@
 // Data access layer (D1)
 // -----------------------------------------------------------------------------
 
+import { LANGS } from './i18n.js';
+
+/**
+ * Translational columns for tools, derived from LANGS.
+ *
+ * The first language uses the bare columns (`name`, `description`, `tags`,
+ * `review_md`); every subsequent locale adds `<field>_<code>`. Generating them
+ * here means the INSERT/UPDATE statements and their bind lists stay in sync with
+ * the locale list — adding a language only needs the migration that creates the
+ * columns.
+ */
+const TOOL_I18N_FIELDS = ['name', 'description', 'tags', 'review_md'];
+
+/** Column names for every locale after the first, in LANGS order. */
+const TOOL_I18N_COLUMNS = LANGS.slice(1).flatMap((l) =>
+  TOOL_I18N_FIELDS.map((f) => `${f}_${l.code}`)
+);
+
+/** Same for categories, which only carry a name and a description. */
+const CATEGORY_I18N_COLUMNS = LANGS.slice(1).flatMap((l) =>
+  ['name', 'description'].map((f) => `${f}_${l.code}`)
+);
+
+/** Blank placeholder list of the right length: "?, ?, ?" */
+const placeholders = (n) => Array.from({ length: n }, () => '?').join(', ');
+
 export const PRICING = {
   free: '免费',
   freemium: '免费增值',
@@ -70,44 +96,49 @@ export async function getCategory(db, id) {
 }
 
 export async function createCategory(db, data) {
+  // Base columns + one block per locale after the first, mirroring tools.
+  const baseCols = ['slug', 'name', 'icon', 'description', 'sort_order', 'visible', 'updated_at'];
+  const cols = [...baseCols, ...CATEGORY_I18N_COLUMNS];
+  const baseBinds = [
+    data.slug,
+    data.name,
+    data.icon || 'grid',
+    data.description || '',
+    Number(data.sort_order) || 0,
+    data.visible ? 1 : 0,
+    now(),
+  ];
+  const i18nBinds = CATEGORY_I18N_COLUMNS.map((col) => data[col] || '');
+
   const { meta } = await db
     .prepare(
-      `INSERT INTO categories (slug, name, name_en, icon, description, description_en, sort_order, visible, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO categories (${cols.join(', ')})
+       VALUES (${placeholders(cols.length)})`
     )
-    .bind(
-      data.slug,
-      data.name,
-      data.name_en || '',
-      data.icon || 'grid',
-      data.description || '',
-      data.description_en || '',
-      Number(data.sort_order) || 0,
-      data.visible ? 1 : 0,
-      now()
-    )
+    .bind(...baseBinds, ...i18nBinds)
     .run();
   return meta.last_row_id;
 }
 
 export async function updateCategory(db, id, data) {
+  const setCols = [
+    'slug=?', 'name=?', 'icon=?', 'description=?', 'sort_order=?', 'visible=?',
+    ...CATEGORY_I18N_COLUMNS.map((c) => `${c}=?`),
+    'updated_at=?',
+  ];
+  const baseBinds = [
+    data.slug,
+    data.name,
+    data.icon || 'grid',
+    data.description || '',
+    Number(data.sort_order) || 0,
+    data.visible ? 1 : 0,
+  ];
+  const i18nBinds = CATEGORY_I18N_COLUMNS.map((col) => data[col] || '');
+
   await db
-    .prepare(
-      `UPDATE categories SET slug=?, name=?, name_en=?, icon=?, description=?, description_en=?,
-        sort_order=?, visible=?, updated_at=? WHERE id=?`
-    )
-    .bind(
-      data.slug,
-      data.name,
-      data.name_en || '',
-      data.icon || 'grid',
-      data.description || '',
-      data.description_en || '',
-      Number(data.sort_order) || 0,
-      data.visible ? 1 : 0,
-      now(),
-      id
-    )
+    .prepare(`UPDATE categories SET ${setCols.join(', ')} WHERE id=?`)
+    .bind(...baseBinds, ...i18nBinds, now(), id)
     .run();
 }
 
@@ -326,79 +357,84 @@ export async function listToolsAdmin(db, { q = '', category = '', status = '', s
 }
 
 export async function createTool(db, data) {
+  // Base columns plus one block per language after the first. Column names come
+  // from TOOL_I18N_COLUMNS, so a new locale only needs its DB columns.
+  const baseCols = [
+    'slug', 'name', 'url', 'description', 'category_id', 'tags', 'pricing', 'logo_url',
+    'is_hot', 'is_new', 'is_featured', 'nofollow', 'noindex', 'in_sitemap',
+    'status', 'sort_order',
+    'review_md', 'source', 'updated_at',
+  ];
+  const cols = [...baseCols, ...TOOL_I18N_COLUMNS];
+
+  const baseBinds = [
+    data.slug,
+    data.name,
+    data.url,
+    data.description || '',
+    data.category_id || null,
+    Array.isArray(data.tags) ? data.tags.join(',') : data.tags || '',
+    data.pricing || 'free',
+    data.logo_url || '',
+    data.is_hot ? 1 : 0,
+    data.is_new ? 1 : 0,
+    data.is_featured ? 1 : 0,
+    data.nofollow === false ? 0 : 1,
+    data.noindex ? 1 : 0,
+    data.in_sitemap === false ? 0 : 1,
+    data.status || 'published',
+    Number(data.sort_order) || 0,
+    data.review_md || '',
+    data.source || '',
+    now(),
+  ];
+  const i18nBinds = TOOL_I18N_COLUMNS.map((col) => data[col] || '');
+
   const { meta } = await db
     .prepare(
-      `INSERT INTO tools
-        (slug, name, url, description, category_id, tags, pricing, logo_url,
-         is_hot, is_new, is_featured, nofollow, noindex, in_sitemap, status, sort_order,
-         name_en, description_en, tags_en,
-         review_md, review_md_en, source, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO tools (${cols.join(', ')})
+       VALUES (${placeholders(cols.length)})`
     )
-    .bind(
-      data.slug,
-      data.name,
-      data.url,
-      data.description || '',
-      data.category_id || null,
-      Array.isArray(data.tags) ? data.tags.join(',') : data.tags || '',
-      data.pricing || 'free',
-      data.logo_url || '',
-      data.is_hot ? 1 : 0,
-      data.is_new ? 1 : 0,
-      data.is_featured ? 1 : 0,
-      data.nofollow === false ? 0 : 1,
-      data.noindex ? 1 : 0,
-      data.in_sitemap === false ? 0 : 1,
-      data.status || 'published',
-      Number(data.sort_order) || 0,
-      data.name_en || '',
-      data.description_en || '',
-      data.tags_en || '',
-      data.review_md || '',
-      data.review_md_en || '',
-      data.source || '',
-      now()
-    )
+    .bind(...baseBinds, ...i18nBinds)
     .run();
   return meta.last_row_id;
 }
 
 export async function updateTool(db, id, data) {
+  const setCols = [
+    'slug=?', 'name=?', 'url=?', 'description=?', 'category_id=?', 'tags=?',
+    'pricing=?', 'logo_url=?', 'is_hot=?', 'is_new=?', 'is_featured=?',
+    'nofollow=?', 'noindex=?', 'in_sitemap=?', 'status=?',
+    'sort_order=?',
+    'review_md=?',
+    ...TOOL_I18N_COLUMNS.map((c) => `${c}=?`),
+    'updated_at=?',
+  ];
+
+  const baseBinds = [
+    data.slug,
+    data.name,
+    data.url,
+    data.description || '',
+    data.category_id || null,
+    Array.isArray(data.tags) ? data.tags.join(',') : data.tags || '',
+    data.pricing || 'free',
+    data.logo_url || '',
+    data.is_hot ? 1 : 0,
+    data.is_new ? 1 : 0,
+    data.is_featured ? 1 : 0,
+    data.nofollow === false ? 0 : 1,
+    data.noindex ? 1 : 0,
+    data.in_sitemap === false ? 0 : 1,
+    data.status || 'published',
+    Number(data.sort_order) || 0,
+    data.review_md || '',
+  ];
+  const i18nBinds = TOOL_I18N_COLUMNS.map((col) => data[col] || '');
+
   await db
-    .prepare(
-      `UPDATE tools SET slug=?, name=?, url=?, description=?, category_id=?, tags=?,
-        pricing=?, logo_url=?, is_hot=?, is_new=?, is_featured=?,
-        nofollow=?, noindex=?, in_sitemap=?, status=?,
-        sort_order=?,
-        name_en=?, description_en=?, tags_en=?,
-        review_md=?, review_md_en=?, updated_at=? WHERE id=?`
-    )
-    .bind(
-      data.slug,
-      data.name,
-      data.url,
-      data.description || '',
-      data.category_id || null,
-      Array.isArray(data.tags) ? data.tags.join(',') : data.tags || '',
-      data.pricing || 'free',
-      data.logo_url || '',
-      data.is_hot ? 1 : 0,
-      data.is_new ? 1 : 0,
-      data.is_featured ? 1 : 0,
-      data.nofollow === false ? 0 : 1,
-      data.noindex ? 1 : 0,
-      data.in_sitemap === false ? 0 : 1,
-      data.status || 'published',
-      Number(data.sort_order) || 0,
-      data.name_en || '',
-      data.description_en || '',
-      data.tags_en || '',
-      data.review_md || '',
-      data.review_md_en || '',
-      now(),
-      id
-    )
+    .prepare(`UPDATE tools SET ${setCols.join(', ')} WHERE id=?`)
+    .bind(...baseBinds, ...i18nBinds, now(), id)
     .run();
 }
 

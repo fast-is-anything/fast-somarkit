@@ -174,14 +174,18 @@ async function router(request, env, ctx) {
   if ((pubPath === '/api/search' || path === '/api/search') && method === 'GET') {
     const q = (url.searchParams.get('q') || '').trim().toLowerCase();
     const tools = await loadPublished(env.DB, lang);
-    // Match BOTH languages regardless of the visitor's language: someone on the
-    // English site may still search for a Chinese tool name (and vice versa).
-    // The haystack is built from the raw row so the Chinese original stays
-    // searchable even when an English translation is shown.
-    const haystack = (t) => [
-      t.name, t.name_en, t.description, t.description_en,
-      t.tags.join(' '), t.tags_en, t.category_name,
-    ].filter(Boolean).join(' ').toLowerCase();
+    // Match every language regardless of the visitor's language: someone on the
+    // English site may still search for a Chinese tool name and vice versa.
+    // Every `_<code>` column is included, so search coverage grows with the
+    // locale list instead of being pinned to en.
+    const haystack = (t) => {
+      const parts = [t.name, t.description, t.tags.join(' '), t.category_name];
+      LANGS.forEach((l, i) => {
+        if (i === 0) return;
+        parts.push(t[`name_${l.code}`], t[`description_${l.code}`], t[`tags_${l.code}`]);
+      });
+      return parts.filter(Boolean).join(' ').toLowerCase();
+    };
     const results = (q ? tools.filter((t) => haystack(t).includes(q)) : tools)
       .slice(0, 30).map((t) => ({
         id: t.id, name: t.name, slug: t.slug, url: t.url,
@@ -836,11 +840,8 @@ async function adminPost(env, ctx, request, path, url, user) {
         in_sitemap: b.in_sitemap === '1' || b.in_sitemap === 'on' || b.in_sitemap === true,
         status: b.status || 'published',
         sort_order: Number(b.sort_order) || 0,
-        name_en: String(b.name_en || '').trim(),
-        description_en: String(b.description_en || '').trim(),
-        tags_en: String(b.tags_en || '').trim(),
         review_md: String(b.review_md || ''),
-        review_md_en: String(b.review_md_en || ''),
+        ...readLocalizedFields(b),
         source: 'admin',
       });
       await logAudit(env.DB, user.email, 'tool.create', 'tool', id, name);
@@ -883,11 +884,8 @@ async function adminPost(env, ctx, request, path, url, user) {
         in_sitemap: b.in_sitemap === '1' || b.in_sitemap === 'on' || b.in_sitemap === true,
         status: b.status || 'published',
         sort_order: Number(b.sort_order) || 0,
-        name_en: String(b.name_en || '').trim(),
-        description_en: String(b.description_en || '').trim(),
-        tags_en: String(b.tags_en || '').trim(),
         review_md: String(b.review_md || ''),
-        review_md_en: String(b.review_md_en || ''),
+        ...readLocalizedFields(b),
       });
       await logAudit(env.DB, user.email, 'tool.update', 'tool', id, name);
       return redirect(`/admin/tools/${id}/edit?ok=${encodeURIComponent('已保存')}`);
@@ -916,10 +914,9 @@ async function adminPost(env, ctx, request, path, url, user) {
       if (clash) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
       const id = await createCategory(env.DB, {
         slug, name,
-        name_en: String(b.name_en || ''),
         icon: b.icon || 'grid',
         description: String(b.description || ''),
-        description_en: String(b.description_en || ''),
+        ...readLocalizedCategoryFields(b),
         sort_order: Number(b.sort_order) || 0,
         visible: b.visible === '1' || b.visible === 'on' || b.visible === true,
       });
@@ -946,10 +943,9 @@ async function adminPost(env, ctx, request, path, url, user) {
       }
       await updateCategory(env.DB, id, {
         slug, name,
-        name_en: String(b.name_en || ''),
         icon: b.icon || 'grid',
         description: String(b.description || ''),
-        description_en: String(b.description_en || ''),
+        ...readLocalizedCategoryFields(b),
         sort_order: Number(b.sort_order) || 0,
         visible: b.visible === '1' || b.visible === 'on' || b.visible === true,
       });
@@ -1076,4 +1072,44 @@ function normalizeLogo(raw) {
   if (!v) return '';
   if (/^https?:\/\//i.test(v)) return v;
   return '';
+}
+
+/**
+ * Collect the per-language columns of a tool from a submitted form body.
+ *
+ * The first language is stored in the bare column (`name`, `description`,
+ * `tags`, `review_md`); every other language uses `<field>_<code>`. Reading
+ * them from LANGS means adding a locale needs no change here — the form simply
+ * has more inputs.
+ *
+ * @param {object} body parsed form body (plain object of string values)
+ * @returns {object} e.g. { name_en: '…', description_en: '…', … }
+ */
+function readLocalizedFields(body) {
+  const out = {};
+  LANGS.forEach((l, i) => {
+    if (i === 0) return; // first language lives in the bare columns
+    const code = l.code;
+    out[`name_${code}`] = String(body[`name_${code}`] || '').trim();
+    out[`description_${code}`] = String(body[`description_${code}`] || '').trim();
+    out[`tags_${code}`] = String(body[`tags_${code}`] || '').trim();
+    out[`review_md_${code}`] = String(body[`review_md_${code}`] || '');
+  });
+  return out;
+}
+
+/**
+ * Same idea for categories: `name_<code>` / `description_<code>` for every
+ * locale after the first. Kept separate because categories have no tags or
+ * review body.
+ */
+function readLocalizedCategoryFields(body) {
+  const out = {};
+  LANGS.forEach((l, i) => {
+    if (i === 0) return;
+    const code = l.code;
+    out[`name_${code}`] = String(body[`name_${code}`] || '').trim();
+    out[`description_${code}`] = String(body[`description_${code}`] || '').trim();
+  });
+  return out;
 }
