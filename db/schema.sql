@@ -5,10 +5,19 @@
 CREATE TABLE IF NOT EXISTS categories (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   slug        TEXT    NOT NULL UNIQUE,
-  name        TEXT    NOT NULL,
+  name        TEXT    NOT NULL,            -- Chinese (default language)
+  -- Translations, one column per non-default locale in src/lib/i18n.js (LANGS):
+  -- en, ja, ko. An empty value means "not translated yet"; the front end then
+  -- falls back to the Chinese original. Adding a locale needs a matching set
+  -- of `<field>_<code>` columns (see db/migrations/004_langs_ja_ko.sql).
   name_en     TEXT    DEFAULT '',
+  name_ja     TEXT    DEFAULT '',
+  name_ko     TEXT    DEFAULT '',
   icon        TEXT    DEFAULT 'grid',     -- key into ICONS map in src/lib/icons.js
   description TEXT    DEFAULT '',
+  description_en TEXT DEFAULT '',
+  description_ja TEXT DEFAULT '',
+  description_ko TEXT DEFAULT '',
   sort_order  INTEGER NOT NULL DEFAULT 0,
   visible     INTEGER NOT NULL DEFAULT 1, -- 1 = show on the public site
   created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -43,19 +52,28 @@ CREATE TABLE IF NOT EXISTS tools (
   status          TEXT    NOT NULL DEFAULT 'published', -- draft | published | archived
   sort_order      INTEGER NOT NULL DEFAULT 0,
   visit_count     INTEGER NOT NULL DEFAULT 0,
-  -- English twins of the user-facing text above. An empty value means "not
+  -- Translations of the user-facing text above, one set per non-default locale
+  -- (en, ja, ko — see LANGS in src/lib/i18n.js). An empty value means "not
   -- translated yet": the front end falls back to the Chinese original, and
-  -- `name_en` in particular falls back to `name` (most tool names are already
-  -- English).
+  -- `name_<code>` in particular falls back to `name` (most tool names are
+  -- already English).
   name_en         TEXT    DEFAULT '',
   description_en  TEXT    DEFAULT '',
   tags_en         TEXT    DEFAULT '',
+  name_ja         TEXT    DEFAULT '',
+  description_ja  TEXT    DEFAULT '',
+  tags_ja         TEXT    DEFAULT '',
+  name_ko         TEXT    DEFAULT '',
+  description_ko  TEXT    DEFAULT '',
+  tags_ko         TEXT    DEFAULT '',
   -- Long-form editorial review, authored as Markdown in the admin console and
   -- rendered on the tool detail page between the cards and the info grid.
-  -- One column per site language: `review_md` is Chinese, `review_md_en` is
-  -- English. A missing translation falls back to the other language.
+  -- One column per site language: `review_md` is Chinese, `review_md_<code>`
+  -- is the translation. A missing translation falls back to another language.
   review_md       TEXT    DEFAULT '',
   review_md_en    TEXT    DEFAULT '',
+  review_md_ja    TEXT    DEFAULT '',
+  review_md_ko    TEXT    DEFAULT '',
   source          TEXT    DEFAULT '',      -- provenance for imports
   created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))

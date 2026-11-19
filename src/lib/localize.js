@@ -1,18 +1,22 @@
 // -----------------------------------------------------------------------------
 // Content localisation.
 //
-// Every user-facing text field has a Chinese original and an optional English
-// twin (`<field>_en`). The rules are deliberately simple and identical
-// everywhere so a page never mixes languages inconsistently:
+// Every user-facing text field has a Chinese original and one optional
+// translation per additional locale (`<field>_en`, `<field>_ja`,
+// `<field>_ko`). The rules are deliberately simple and identical everywhere so
+// a page never mixes languages inconsistently:
 //
 //   • the requested language has a non-empty value → use it
-//   • otherwise                                   → fall back to Chinese
+//   • otherwise                                    → fall back to Chinese
 //
 // `name` is special-cased: most tool names are already English words
-// (ChatGPT, Claude, Cursor), so an empty `name_en` simply reuses `name`.
+// (ChatGPT, Claude, Cursor), so an empty `name_<code>` simply reuses `name`.
+//
+// The locale list comes from LANGS, so a locale added there needs only its
+// database columns (see db/migrations) — nothing in this file changes.
 // -----------------------------------------------------------------------------
 
-import { normalizeLang, DEFAULT_LANG } from './i18n.js';
+import { LANGS, normalizeLang, DEFAULT_LANG } from './i18n.js';
 
 /** First non-empty, trimmed candidate. */
 function pick(...candidates) {
@@ -25,12 +29,25 @@ function pick(...candidates) {
 }
 
 /**
- * Localise one tool for a language.
+ * Read one field for a language.
  *
- * Language-neutral: for any locale other than the default it reads the
- * `<field>_<code>` column and falls back to the default-language value when the
- * translation is blank. Adding a locale needs a column of that shape; this
- * function picks it up without further changes.
+ * For the default language this is the bare column. For any other language the
+ * `<field>_<code>` column is preferred and the fallback chain walks the
+ * remaining locales in LANGS order (Chinese first) before giving up — so a
+ * missing Japanese translation shows the Chinese original rather than an
+ * empty or English string.
+ */
+function readField(row, field, code) {
+  if (code === DEFAULT_LANG) return pick(row[field]);
+  // Fallbacks: every other locale, default language first.
+  const chain = LANGS.filter((l) => l.code !== code)
+    .sort((a, b) => (a.code === DEFAULT_LANG ? -1 : b.code === DEFAULT_LANG ? 1 : 0))
+    .map((l) => (l.code === DEFAULT_LANG ? row[field] : row[`${field}_${l.code}`]));
+  return pick(row[`${field}_${code}`], ...chain);
+}
+
+/**
+ * Localise one tool for a language.
  *
  * Returns a shallow copy with `name`, `description`, `tags` (array) and
  * `review_md` resolved to the requested language.
@@ -39,18 +56,16 @@ export function localizeTool(tool, lang) {
   if (!tool) return tool;
   const code = normalizeLang(lang);
   const translated = code !== DEFAULT_LANG;
-  // `<field>_<code>` holds the translation; the bare column is the original.
-  const forLang = (field) => (translated ? pick(tool[`${field}_${code}`], tool[field]) : pick(tool[field]));
   // `tags` is stored as a comma separated string; expose both forms.
-  const rawTags = forLang('tags');
+  const rawTags = readField(tool, 'tags', code);
   return {
     ...tool,
-    name: forLang('name'),
-    description: forLang('description'),
+    name: readField(tool, 'name', code),
+    description: readField(tool, 'description', code),
     tags: rawTags
       ? String(rawTags).split(',').map((s) => s.trim()).filter(Boolean)
       : [],
-    review_md: forLang('review_md'),
+    review_md: readField(tool, 'review_md', code),
     // Which fields actually came from a translation, for admin hints.
     isTranslated: {
       name: Boolean(translated && pick(tool[`name_${code}`])),
@@ -66,21 +81,14 @@ export function localizeTools(tools, lang) {
   return (Array.isArray(tools) ? tools : []).map((t) => localizeTool(t, lang));
 }
 
-/**
- * Localise one category.
- * Same language-neutral rule as localizeTool: read `<field>_<code>` for any
- * non-default locale, falling back to the default-language column.
- */
+/** Localise one category (name + description). */
 export function localizeCategory(category, lang) {
   if (!category) return category;
   const code = normalizeLang(lang);
-  const translated = code !== DEFAULT_LANG;
-  const forLang = (field) =>
-    (translated ? pick(category[`${field}_${code}`], category[field]) : pick(category[field]));
   return {
     ...category,
-    name: forLang('name'),
-    description: forLang('description'),
+    name: readField(category, 'name', code),
+    description: readField(category, 'description', code),
   };
 }
 

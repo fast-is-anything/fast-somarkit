@@ -58,10 +58,11 @@ export default {
 // ---------------------------------------------------------------------------
 // Localised data access.
 //
-// The public site is bilingual: every query that feeds a public template is
+// The public site is multilingual: every query that feeds a public template is
 // wrapped here so the templates receive already-localised content. Keeping the
-// translation at the data boundary (rather than sprinkling `x_en || x` through
-// the templates) means a new template automatically gets the right language.
+// translation at the data boundary (rather than sprinkling `x_<code> || x`
+// through the templates) means a new template automatically gets the right
+// language.
 // ---------------------------------------------------------------------------
 
 async function loadPublished(db, lang) {
@@ -90,7 +91,8 @@ async function router(request, env, ctx) {
   // GA4 measurement id for the public pages; empty string disables the tag.
   const gaId = String(env.GA_MEASUREMENT_ID || '').trim();
 
-  // Language comes from the URL prefix alone (`/zh/...` or `/en/...`).
+  // Language comes from the URL prefix alone (`/zh/...`, `/en/...`, `/ja/...`,
+  // `/ko/...` — one per LANGS entry).
   //
   // There is no cookie and no Accept-Language sniffing: Googlebot sends
   // `Accept-Language: en`, so any guess would make the crawler index a language
@@ -175,7 +177,7 @@ async function router(request, env, ctx) {
     const q = (url.searchParams.get('q') || '').trim().toLowerCase();
     const tools = await loadPublished(env.DB, lang);
     // Match every language regardless of the visitor's language: someone on the
-    // English site may still search for a Chinese tool name and vice versa.
+    // Japanese site may still search for a Chinese tool name and vice versa.
     // Every `_<code>` column is included, so search coverage grows with the
     // locale list instead of being pinned to en.
     const haystack = (t) => {
@@ -386,7 +388,7 @@ async function router(request, env, ctx) {
 
 // --- public render ----------------------------------------------------------
 
-async function renderHome(request, env, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false) {
+async function renderHome(request, env, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false) {
   const [categories, counts, tools, featured] = await Promise.all([
     loadCategories(env.DB, lang),
     countToolsByCategory(env.DB),
@@ -519,7 +521,9 @@ async function handleSubmit(request, env, theme, lang, gaId, basePath = '/', unp
     return renderError(t(lang, 'submit.errGeneric'));
   }
 
-  return redirect('/submit/thanks');
+  // Stay in the language the form was submitted from: the success page must not
+  // drop the visitor back into the default locale.
+  return redirect(localePath(lang, '/submit/thanks'));
 }
 
 /** Salted SHA-256 of the client IP — privacy-preserving rate-limit key. */

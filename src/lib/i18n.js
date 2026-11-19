@@ -4,12 +4,26 @@
 // and published as-is; only the interface chrome is translated.
 // -----------------------------------------------------------------------------
 
+/**
+ * Site languages, in display order. The first entry is the default language
+ * and owns the bare database columns (`name`, `description`, `tags`,
+ * `review_md`); every later entry stores its translation in
+ * `<field>_<code>` columns.
+ *
+ *   code        URL prefix and database column suffix (`/ja/…`, `name_ja`)
+ *   label       native language name, shown in the language switcher
+ *   short       compact badge shown when the switcher is collapsed
+ *   htmlLang    value of <html lang> and the schema.org inLanguage
+ *   ogLocale    value of <meta property="og:locale">
+ */
 export const LANGS = [
-  { code: 'zh', label: '中文', short: '中' },
-  { code: 'en', label: 'English', short: 'EN' },
+  { code: 'zh', label: '中文', short: '中', htmlLang: 'zh-CN', ogLocale: 'zh_CN' },
+  { code: 'en', label: 'English', short: 'EN', htmlLang: 'en', ogLocale: 'en_US' },
+  { code: 'ja', label: '日本語', short: '日', htmlLang: 'ja', ogLocale: 'ja_JP' },
+  { code: 'ko', label: '한국어', short: '한', htmlLang: 'ko', ogLocale: 'ko_KR' },
 ];
 
-export const DEFAULT_LANG = 'zh';
+export const DEFAULT_LANG = LANGS[0].code;
 
 export function normalizeLang(v) {
   return LANGS.some((l) => l.code === v) ? v : DEFAULT_LANG;
@@ -18,23 +32,27 @@ export function normalizeLang(v) {
 // -----------------------------------------------------------------------------
 // Locale-prefixed routing.
 //
-// Every public page lives under a language prefix: `/zh/...` or `/en/...`.
-// The language is decided by the URL alone — no cookie, no Accept-Language
-// sniffing — so a shared link always renders in one language and crawlers get
-// exactly what users get.
+// Every public page lives under a language prefix, one per entry in LANGS
+// (`/zh/...`, `/en/...`, `/ja/...`, `/ko/...`). The language is decided by the
+// URL alone — no cookie, no Accept-Language sniffing — so a shared link always
+// renders in one language and crawlers get exactly what users get. Adding a
+// locale to LANGS therefore adds its routes and its hreflang set too.
 // -----------------------------------------------------------------------------
 
-const LOCALE_PREFIX = /^\/(zh|en)(?=\/|$)/;
+const LOCALE_CODES = LANGS.map((l) => l.code);
+
+const LOCALE_PREFIX = new RegExp(`^/(${LOCALE_CODES.join('|')})(?=/|$)`);
 
 /**
  * Split a pathname into its language and the language-neutral remainder.
  *
  *   '/zh'            → { lang: 'zh', rest: '/',  matched: true  }
  *   '/en/tools/x'    → { lang: 'en', rest: '/tools/x', matched: true }
+ *   '/ja'            → { lang: 'ja', rest: '/',  matched: true  }
  *   '/tools/x'       → { lang: null, rest: '/tools/x', matched: false }
  *
- * Callers treat `matched: false` on public routes as a 404: unprefixed URLs are
- * intentionally unsupported so there is exactly one canonical address per page.
+ * Callers treat `matched: false` on public routes as an unprefixed alias that
+ * renders in the default language (see the router for the canonical rules).
  */
 export function splitLocale(pathname) {
   const path = pathname || '/';
@@ -167,6 +185,22 @@ const DICT = {
     'submit.errGeneric': '提交失败，请稍后再试',
     'submit.privacy': '我们只会使用你提供的邮箱回复审核结果，不会用于其他用途。',
 
+    'about.title': '关于 SoMarkIt — AI 工具导航',
+    'about.h1': '关于 SoMarkIt',
+    'about.p1': 'SoMarkIt 是一个由站长人工筛选 + 持续维护的 AI 工具导航站。我们不追求收录最多，而是希望每个被收录的工具都经过实际验证，并配上清楚的定位说明。',
+    'about.p2': '站点运行在 Cloudflare Workers + D1 之上，内容通过自带的管理后台维护，收录与更新实时生效。',
+    'about.h2What': '我们收录什么',
+    'about.li1': '可公开访问、有明确价值的 AI 产品与服务',
+    'about.li2': '覆盖对话、智能体、编程、办公、图像、视频、音频、设计、研究、行业、大模型、开发平台等门类',
+    'about.li3': '每条记录包含定价模式、核心标签与一句话定位',
+    'about.h2Submit': '收录提交',
+    'about.submitNote': '如需提交或纠正收录信息，请通过站点管理后台联系站长。',
+
+    'notFound.title': '页面不存在 | SoMarkIt',
+    'notFound.h1': '这个工具还没有被标记',
+    'notFound.body': '页面不存在，或者工具已被移除。',
+    'notFound.back': '返回首页',
+
     'seo.homeTitle': 'SoMarkIt — 精选 AI 工具导航 | 让每个好工具被标记',
     'seo.siteDesc':
       'SoMarkIt 是一站式 AI 工具导航平台，精选收录对话、智能体、编程、办公、图像、视频等 13 大类优质 AI 工具，持续更新、快速检索。',
@@ -277,9 +311,277 @@ const DICT = {
     'submit.errGeneric': 'Submission failed, please try again later',
     'submit.privacy': 'We only use your email to reply about this submission.',
 
+    'about.title': 'About SoMarkIt — AI Tool Directory',
+    'about.h1': 'About SoMarkIt',
+    'about.p1': "SoMarkIt is a hand-curated AI tool directory. We do not aim to list the most tools — every entry is checked in practice and comes with a clear positioning note.",
+    'about.p2': 'The site runs on Cloudflare Workers + D1, and content is maintained through a built-in admin console with instant publishing.',
+    'about.h2What': 'What we list',
+    'about.li1': 'Publicly accessible AI products and services with clear value',
+    'about.li2': 'Chat assistants, agents, coding, productivity, image, video, audio, design, research, models and platforms',
+    'about.li3': 'Each record includes pricing model, core tags and a one-line positioning',
+    'about.h2Submit': 'Submissions',
+    'about.submitNote': 'To submit or correct an entry, please contact the site owner through the admin console.',
+
+    'notFound.title': 'Page not found | SoMarkIt',
+    'notFound.h1': 'This tool has not been marked yet',
+    'notFound.body': 'The page does not exist, or the tool has been removed.',
+    'notFound.back': 'Back to home',
+
     'seo.homeTitle': 'SoMarkIt — Curated AI Tool Directory',
     'seo.siteDesc':
       'SoMarkIt is a curated directory of AI tools covering chat assistants, agents, coding, productivity, image, video and 13 categories in total.',
+  },
+
+  ja: {
+    'nav.allTools': 'すべてのツール',
+    'nav.search': 'AI ツールを検索…',
+    'nav.searchAria': 'AI ツールを検索',
+    'nav.language': '言語を切り替え',
+    'nav.theme': 'テーマを切り替え',
+    'nav.categories': 'カテゴリー',
+    'nav.submit': 'ツールを投稿',
+
+    'hero.title.1': '優れたツールは、',
+    'hero.title.2': '見つけられるべき',
+    'hero.subtitle': (n, c) => `${n} 個の AI ツールを ${c} 個のカテゴリーに整理しました。`,
+    'hero.searchPlaceholder': 'ツール名・機能・タグで検索…',
+    'hero.searchPlaceholderShort': 'ツールを検索…',
+    'hero.searchAria': 'サイト内検索',
+    'hero.searchBtn': '検索',
+    'hero.statTools': '収録ツール',
+    'hero.statCategories': 'カテゴリー',
+    'hero.statUpdate': '更新頻度',
+    'hero.statUpdateValue': '毎週',
+    'hero.featured': '今旬の AI ツール',
+
+    'content.title': 'ツール一覧',
+    'content.toolsCount': (n) => `全 ${n} 件のツール`,
+    'content.filtered': (n) => `${n} 件が一致`,
+    'content.filterAria': '料金で絞り込む',
+    'content.total': (n) => `全 ${n} 件`,
+    'content.viewAll': 'すべて見る',
+    'content.matched': (n, t) => `${n} / ${t} 件`,
+
+    'pricing.all': 'すべて',
+    'pricing.free': '無料',
+    'pricing.freemium': 'フリーミアム',
+    'pricing.paid': '有料',
+    'pricing.opensource': 'オープンソース',
+
+    'card.review': 'レビュー',
+    'card.visit': '開く',
+    'card.noDesc': '説明はまだありません',
+
+    'badge.hot': '🔥 人気',
+    'badge.new': '✦ 新着',
+
+    'empty.title': '一致するツールが見つかりません',
+    'empty.hint': '別のキーワードをお試しいただくか、',
+    'empty.clear': '絞り込みを解除',
+
+    'sidebar.expand': 'サイドバーを開く',
+    'sidebar.collapse': 'サイドバーを閉じる',
+    'sidebar.open': 'カテゴリーナビを開く',
+    'sidebar.home': 'SoMarkIt ホーム',
+
+    'footer.tagline': '優れたツールは、見つけられるべき',
+    'footer.about': 'このサイトについて',
+    'footer.admin': '管理画面',
+    'footer.contact': 'お問い合わせ',
+    'footer.sitemap': 'サイトマップ',
+    'footer.terms': '利用規約',
+
+    'detail.home': 'ホーム',
+    'detail.uncategorized': '未分類',
+    'detail.visits': (n) => `${n} 回のアクセス`,
+    'detail.visitSite': '公式サイトへ',
+    'detail.related': '関連ツール',
+    'detail.notFound': 'ページが見つかりません',
+    'detail.disclaimer': '免責事項：レビュー内容は編集部個人の見解と利用経験であり、商業的な推薦や投資助言ではありません。製品情報や料金は予告なく変更される場合があります。最新の情報は公式サイトをご確認ください。',
+    'detail.infoCategory': 'カテゴリー',
+    'detail.infoPrice': '料金',
+    'detail.infoTags': 'タグ',
+    'detail.infoWebsite': '公式サイト',
+    'detail.reviewLabel': 'レビュー本文',
+
+    // Submit-tool form
+    'submit.title': 'ツールを投稿',
+    'submit.lead': '便利な AI ツールを見つけましたか？ぜひ教えてください。審査後にサイトへ掲載します。',
+    'submit.name': 'ツール名',
+    'submit.namePh': '例：ChatGPT',
+    'submit.url': '公式サイトの URL',
+    'submit.urlPh': 'https://example.com',
+    'submit.category': 'カテゴリー',
+    'submit.categoryPh': 'カテゴリーを選択',
+    'submit.pricing': '料金モデル',
+    'submit.tags': 'タグ',
+    'submit.tagsPh': '対話, 執筆（カンマ区切り）',
+    'submit.description': 'ひとこと紹介',
+    'submit.descriptionPh': '何ができて、誰に向いているか',
+    'submit.yourName': 'お名前',
+    'submit.yourNamePh': '任意',
+    'submit.yourEmail': '連絡先メール',
+    'submit.yourEmailPh': '任意',
+    'submit.note': '補足',
+    'submit.notePh': '任意：おすすめの理由や注目ポイントなど',
+    'submit.submitBtn': '投稿する',
+    'submit.required': '必須',
+    'submit.successTitle': '投稿を受け付けました',
+    'submit.successBody': 'ありがとうございます。審査のうえ、掲載が承認されるとサイトに表示されます。',
+    'submit.again': '続けて投稿する',
+    'submit.back': 'ホームへ戻る',
+    'submit.errName': 'ツール名を入力してください',
+    'submit.errUrl': '正しい URL を入力してください（http:// または https:// で始まる）',
+    'submit.errCategory': 'カテゴリーを選択してください',
+    'submit.errRate': '投稿が多すぎます。しばらくしてからもう一度お試しください',
+    'submit.errGeneric': '投稿に失敗しました。しばらくしてからもう一度お試しください',
+    'submit.privacy': 'ご記入いただいたメールアドレスは、この投稿に関する連絡にのみ使用します。',
+
+    'about.title': 'SoMarkIt について — AI ツールディレクトリ',
+    'about.h1': 'SoMarkIt について',
+    'about.p1': 'SoMarkIt は運営者が人の手で厳選し、継続的に更新している AI ツールディレクトリです。数多くのツールを集めることより、実際に試して確認したツールだけを、わかりやすい位置づけとともに紹介することを大切にしています。',
+    'about.p2': 'サイトは Cloudflare Workers + D1 上で動作し、内容は管理画面から管理しています。収録・更新の反映は即時です。',
+    'about.h2What': '収録の基準',
+    'about.li1': '一般に公開されており、明確な価値のある AI 製品・サービス',
+    'about.li2': '対話、エージェント、コーディング、業務効率化、画像、動画、音声、デザイン、リサーチ、モデル、開発プラットフォームなど',
+    'about.li3': '各レコードには料金モデル・主要タグ・ひとことでの位置づけを含みます',
+    'about.h2Submit': '掲載のご依頼',
+    'about.submitNote': '掲載のご依頼や情報の訂正は、管理画面から運営者までご連絡ください。',
+
+    'notFound.title': 'ページが見つかりません | SoMarkIt',
+    'notFound.h1': 'このツールはまだ見つかっていません',
+    'notFound.body': 'ページが存在しないか、ツールが削除されています。',
+    'notFound.back': 'ホームへ戻る',
+
+    'seo.homeTitle': 'SoMarkIt — 厳選された AI ツールディレクトリ',
+    'seo.siteDesc':
+      'SoMarkIt は AI ツールを厳選して紹介するディレクトリです。対話アシスタント、エージェント、コーディング、業務効率化、画像、動画など計 13 カテゴリーを収録しています。',
+  },
+
+  ko: {
+    'nav.allTools': '전체 도구',
+    'nav.search': 'AI 도구 검색…',
+    'nav.searchAria': 'AI 도구 검색',
+    'nav.language': '언어 전환',
+    'nav.theme': '테마 전환',
+    'nav.categories': '카테고리',
+    'nav.submit': '도구 제안',
+
+    'hero.title.1': '좋은 도구는,',
+    'hero.title.2': '발견되어야 하니까',
+    'hero.subtitle': (n, c) => `${n}개의 AI 도구를 ${c}개 카테고리로 정리했습니다.`,
+    'hero.searchPlaceholder': '도구 이름, 기능, 태그로 검색…',
+    'hero.searchPlaceholderShort': '도구 검색…',
+    'hero.searchAria': '사이트 검색',
+    'hero.searchBtn': '검색',
+    'hero.statTools': '수록 도구',
+    'hero.statCategories': '카테고리',
+    'hero.statUpdate': '업데이트',
+    'hero.statUpdateValue': '매주',
+    'hero.featured': '요즘 인기 있는 AI 도구',
+
+    'content.title': '도구 목록',
+    'content.toolsCount': (n) => `총 ${n}개 도구`,
+    'content.filtered': (n) => `${n}개 도구가 일치`,
+    'content.filterAria': '가격으로 필터링',
+    'content.total': (n) => `총 ${n}개`,
+    'content.viewAll': '전체 보기',
+    'content.matched': (n, t) => `${n} / ${t}개`,
+
+    'pricing.all': '전체',
+    'pricing.free': '무료',
+    'pricing.freemium': '부분 무료',
+    'pricing.paid': '유료',
+    'pricing.opensource': '오픈소스',
+
+    'card.review': '리뷰',
+    'card.visit': '열기',
+    'card.noDesc': '아직 설명이 없습니다',
+
+    'badge.hot': '🔥 인기',
+    'badge.new': '✦ 신규',
+
+    'empty.title': '일치하는 도구가 없습니다',
+    'empty.hint': '다른 키워드로 검색해 보시거나, ',
+    'empty.clear': '필터 해제',
+
+    'sidebar.expand': '사이드바 펼치기',
+    'sidebar.collapse': '사이드바 접기',
+    'sidebar.open': '카테고리 메뉴 열기',
+    'sidebar.home': 'SoMarkIt 홈',
+
+    'footer.tagline': '좋은 도구는 발견되어야 하니까',
+    'footer.about': '소개',
+    'footer.admin': '관리자',
+    'footer.contact': '문의하기',
+    'footer.sitemap': '사이트맵',
+    'footer.terms': '약관',
+
+    'detail.home': '홈',
+    'detail.uncategorized': '미분류',
+    'detail.visits': (n) => `방문 ${n}회`,
+    'detail.visitSite': '공식 사이트 방문',
+    'detail.related': '관련 도구',
+    'detail.notFound': '페이지를 찾을 수 없습니다',
+    'detail.disclaimer': '면책 조항: 리뷰 내용은 편집자의 개인적인 견해와 사용 경험을 담은 것으로, 상업적 추천이나 투자 조언이 아닙니다. 제품 정보와 가격은 사전 예고 없이 변경될 수 있으므로 공식 사이트의 최신 정보를 확인해 주세요.',
+    'detail.infoCategory': '카테고리',
+    'detail.infoPrice': '가격',
+    'detail.infoTags': '태그',
+    'detail.infoWebsite': '웹사이트',
+    'detail.reviewLabel': '리뷰 본문',
+
+    // Submit-tool form
+    'submit.title': '도구 제안하기',
+    'submit.lead': '좋은 AI 도구를 찾으셨나요? 알려 주시면 검토 후 사이트에 소개해 드립니다.',
+    'submit.name': '도구 이름',
+    'submit.namePh': '예: ChatGPT',
+    'submit.url': '공식 사이트 주소',
+    'submit.urlPh': 'https://example.com',
+    'submit.category': '카테고리',
+    'submit.categoryPh': '카테고리 선택',
+    'submit.pricing': '요금제',
+    'submit.tags': '태그',
+    'submit.tagsPh': '대화, 글쓰기 (쉼표로 구분)',
+    'submit.description': '한 줄 소개',
+    'submit.descriptionPh': '무엇을 하는 도구이고 누구에게 맞는지',
+    'submit.yourName': '이름',
+    'submit.yourNamePh': '선택 사항',
+    'submit.yourEmail': '연락 이메일',
+    'submit.yourEmailPh': '선택 사항',
+    'submit.note': '추가 설명',
+    'submit.notePh': '선택 사항: 추천 이유, 주요 기능 등',
+    'submit.submitBtn': '제안하기',
+    'submit.required': '필수',
+    'submit.successTitle': '제출 완료',
+    'submit.successBody': '감사합니다! 검토 후 승인되면 사이트에 소개됩니다.',
+    'submit.again': '하나 더 제안하기',
+    'submit.back': '홈으로 돌아가기',
+    'submit.errName': '도구 이름을 입력해 주세요',
+    'submit.errUrl': '올바른 주소를 입력해 주세요 (http:// 또는 https:// 로 시작)',
+    'submit.errCategory': '카테고리를 선택해 주세요',
+    'submit.errRate': '제출이 너무 많습니다. 잠시 후 다시 시도해 주세요',
+    'submit.errGeneric': '제출에 실패했습니다. 잠시 후 다시 시도해 주세요',
+    'submit.privacy': '입력하신 이메일은 이 제출 건에 대한 답변에만 사용됩니다.',
+
+    'about.title': 'SoMarkIt 소개 — AI 도구 디렉터리',
+    'about.h1': 'SoMarkIt 소개',
+    'about.p1': 'SoMarkIt은 운영자가 직접 선별하고 꾸준히 관리하는 AI 도구 디렉터리입니다. 가장 많은 도구를 모으기보다, 실제로 사용해 검증한 도구를 명확한 소개와 함께 보여 주는 것을 목표로 합니다.',
+    'about.p2': '사이트는 Cloudflare Workers + D1 위에서 동작하며, 콘텐츠는 관리자 콘솔에서 관리됩니다. 수정 사항은 즉시 반영됩니다.',
+    'about.h2What': '수록 기준',
+    'about.li1': '누구나 이용할 수 있고 명확한 가치가 있는 AI 제품과 서비스',
+    'about.li2': '대화, 에이전트, 코딩, 생산성, 이미지, 영상, 오디오, 디자인, 리서치, 모델, 개발 플랫폼 등',
+    'about.li3': '각 항목에는 요금제, 핵심 태그, 한 줄 소개가 포함됩니다',
+    'about.h2Submit': '제보 및 제안',
+    'about.submitNote': '도구 제안이나 정보 수정은 관리자 콘솔을 통해 운영자에게 알려 주세요.',
+
+    'notFound.title': '페이지를 찾을 수 없습니다 | SoMarkIt',
+    'notFound.h1': '아직 발견되지 않은 도구입니다',
+    'notFound.body': '페이지가 존재하지 않거나 도구가 삭제되었습니다.',
+    'notFound.back': '홈으로 돌아가기',
+
+    'seo.homeTitle': 'SoMarkIt — 엄선한 AI 도구 디렉터리',
+    'seo.siteDesc':
+      'SoMarkIt은 AI 도구를 엄선해 소개하는 디렉터리입니다. 대화 어시스턴트, 에이전트, 코딩, 생산성, 이미지, 영상 등 총 13개 카테고리를 수록하고 있습니다.',
   },
 };
 

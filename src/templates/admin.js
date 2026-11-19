@@ -465,7 +465,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
         <div class="ad-card">
           <div class="ad-card-head">
             <h2>基础信息</h2><span class="spacer"></span>
-            <span class="an-note">英文留空时前台自动回退显示中文</span>
+            <span class="an-note">${LANGS.slice(1).map((l) => esc(l.short)).join(' / ')} 留空时前台自动回退显示中文</span>
           </div>
           <div class="ad-card-body">
             <!-- Bilingual fields.
@@ -489,7 +489,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
                 id="${i === 0 ? 'name' : `name_${l.code}`}" name="${i === 0 ? 'name' : `name_${l.code}`}"
                 ${i === 0 ? 'required' : ''} maxlength="80" ${i === 0 ? '' : 'hidden'}
                 value="${esc(i === 0 ? (t.name || '') : (t[`name_${l.code}`] || ''))}"
-                placeholder="${esc(i === 0 ? '中文名称，例如：文心一言' : `Name in ${l.label} (optional)`)}">`).join('')}
+                placeholder="${esc(i === 0 ? '中文名称，例如：文心一言' : `${l.label} 名称（选填）`)}">`).join('')}
               <div class="ad-hint">其他语言留空时，前台会回退显示中文名称。</div>
             </div>
 
@@ -509,7 +509,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
                 id="${i === 0 ? 'description' : `description_${l.code}`}"
                 name="${i === 0 ? 'description' : `description_${l.code}`}"
                 maxlength="600" ${i === 0 ? '' : 'hidden'}
-                placeholder="${esc(i === 0 ? '中文简介：一句话说明这个工具做什么、适合谁用' : `Description in ${l.label} (optional)`)}">${esc(i === 0 ? (t.description || '') : (t[`description_${l.code}`] || ''))}</textarea>`).join('')}
+                placeholder="${esc(i === 0 ? '中文简介：一句话说明这个工具做什么、适合谁用' : `${l.label} 简介（选填）`)}">${esc(i === 0 ? (t.description || '') : (t[`description_${l.code}`] || ''))}</textarea>`).join('')}
               <div class="ad-hint">建议 40–160 字，显示在卡片上（最多 3 行）。</div>
             </div>
 
@@ -519,7 +519,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
                 id="${i === 0 ? 'tags' : `tags_${l.code}`}" name="${i === 0 ? 'tags' : `tags_${l.code}`}"
                 ${i === 0 ? '' : 'hidden'}
                 value="${esc(i === 0 ? (t.tags || []).join(', ') : (t[`tags_${l.code}`] || ''))}"
-                placeholder="${esc(i === 0 ? '对话, 写作, 多模态' : `Tags in ${l.label}, comma separated`)}">`).join('')}
+                placeholder="${esc(i === 0 ? '对话, 写作, 多模态' : `${l.label} 标签，用逗号分隔（选填）`)}">`).join('')}
               <div class="ad-hint">用英文逗号分隔，最多显示 4 个。其他语言留空则沿用中文标签。</div>
             </div>
           </div>
@@ -687,7 +687,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
               // attribute value is kept as-is by the parser and shows up as a
               // real newline in the placeholder, which breaks the textarea.
               ? '# 评测标题&#10;&#10;这里写这个工具的深度评测……&#10;&#10;## 优点&#10;- 第一点&#10;- 第二点&#10;&#10;## 缺点&#10;- 第一点'
-              : esc(`Review in ${l.label} (optional)`)}"></textarea>`).join('\n          ')}
+              : esc(`${l.label} 评测正文（选填）`)}"></textarea>`).join('\n          ')}
           <div class="ad-mdeditor-preview" id="mdLive" aria-live="polite"></div>
         </div>
         <div class="ad-mdeditor-foot">
@@ -1142,15 +1142,37 @@ export function categoryFormPage({ user, env, category, icons, flash, isNew }) {
     ${flash ? `<div class="ad-alert ad-alert-${esc(flash.type)}" id="adFlash" data-message="1">${esc(flash.message)}</div>` : ''}
     <form method="post" action="${isNew ? '/admin/categories' : `/admin/categories/${c.id}`}">
       <div class="ad-card" style="max-width:640px">
-        <div class="ad-card-head"><h2>${isNew ? '新增分类' : '编辑分类'}</h2></div>
+        <div class="ad-card-head"><h2>${isNew ? '新增分类' : '编辑分类'}</h2><span class="spacer"></span>
+          <span class="an-note">${LANGS.slice(1).map((l) => esc(l.short)).join(' / ')} 留空时前台回退显示中文</span>
+        </div>
         <div class="ad-card-body">
-          <div class="ad-field">
-            <label for="name">分类名称 *</label>
-            <input class="ad-input" id="name" name="name" required maxlength="40" value="${esc(c.name || '')}" placeholder="例如：AI 对话助手">
-          </div>
+          <!-- One row per site language, generated from LANGS: the first
+               language writes the bare name / description columns, every
+               other locale writes name_&lt;code&gt; / description_&lt;code&gt;.
+               A blank translation makes the front end fall back to Chinese. -->
+          ${LANGS.map((l, i) => {
+            const row = i === 0 ? c : {
+              name: c[`name_${l.code}`] || '',
+              description: c[`description_${l.code}`] || '',
+            };
+            return `<div class="ad-lang-row" style="margin-bottom:14px">
+            <div class="ad-lang-row-head">
+              <span class="ad-lang-tag">${esc(l.short)}</span>
+              <span class="ad-lang-row-label">${esc(l.label)}</span>
+            </div>
+            <input class="ad-input" id="${i === 0 ? 'name' : `name_${l.code}`}"
+              name="${i === 0 ? 'name' : `name_${l.code}`}" ${i === 0 ? 'required' : ''} maxlength="40"
+              value="${esc(row.name || '')}"
+              placeholder="${esc(i === 0 ? '例如：AI 对话助手' : `${l.label} 分类名称（选填）`)}">
+            <textarea class="ad-textarea" id="${i === 0 ? 'description' : `description_${l.code}`}"
+              name="${i === 0 ? 'description' : `description_${l.code}`}" maxlength="300"
+              placeholder="${esc(i === 0 ? '用于分类页 SEO 描述' : `${l.label} 描述（选填）`)}">${esc(row.description || '')}</textarea>
+          </div>`;
+          }).join('\n          ')}
           <div class="ad-field">
             <label for="slug">路径标识</label>
             <input class="ad-input" id="slug" name="slug" value="${esc(c.slug || '')}" placeholder="留空自动生成，例如 ai-chat">
+            <div class="ad-hint">前台分类页地址：/${esc(LANGS[0].code)}/<span>${esc(c.slug || 'auto')}</span>，所有语言共用同一路径。</div>
           </div>
           <div class="ad-row">
             <div class="ad-field">
@@ -1162,10 +1184,6 @@ export function categoryFormPage({ user, env, category, icons, flash, isNew }) {
               <label for="sort_order">排序权重</label>
               <input class="ad-input" id="sort_order" name="sort_order" type="number" value="${esc(c.sort_order ?? 0)}">
             </div>
-          </div>
-          <div class="ad-field">
-            <label for="description">描述</label>
-            <textarea class="ad-textarea" id="description" name="description" maxlength="300" placeholder="用于分类页 SEO 描述">${esc(c.description || '')}</textarea>
           </div>
           <label class="ad-check" style="margin-bottom:18px">
             <input type="checkbox" name="visible" value="1" ${c.visible !== 0 ? 'checked' : ''}> 在前台侧边栏显示

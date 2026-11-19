@@ -820,6 +820,37 @@ table.ad-table {
   background: var(--ad-success, #22C55E);
 }
 .ad-lang-dot[hidden] { display: none; }
+
+/* Category form: one stacked block per language (all visible at once, since a
+   category has only a name and a short description per locale). */
+.ad-lang-row {
+  padding: 12px;
+  border: 1px solid var(--ad-border-soft);
+  border-radius: 10px;
+  background: var(--ad-surface-2);
+}
+.ad-lang-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ad-lang-row-label { font-size: 13px; font-weight: 600; color: var(--ad-text-2); }
+.ad-lang-tag {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--ad-surface);
+  border: 1px solid var(--ad-border-soft);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ad-text-3);
+}
+.ad-lang-row .ad-input { margin-bottom: 8px; }
+.ad-lang-row .ad-textarea { min-height: 64px; }
 /* Required-field marker, kept out of the label text for screen readers. */
 .ad-req { color: var(--ad-danger, #EF4444); }
 /* One language block: header row + its preview, separated from the next. */

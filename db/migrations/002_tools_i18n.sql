@@ -5,6 +5,8 @@
 -- an empty value means "not translated yet" and the front end falls back to
 -- the Chinese original.
 --
+-- Ja/ko twins were added later, see 004_langs_ja_ko.sql.
+--
 --   local : npm run db:migrate:local
 --   remote: npx wrangler d1 execute somarkit --remote --file=./db/migrations/002_tools_i18n.sql
 --
