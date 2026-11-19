@@ -7,6 +7,7 @@ import { UI } from '../lib/icons.js';
 import { logoGlyph } from '../lib/logo.js';
 import { PRICING, TOOL_STATUS } from '../lib/db.js';
 import { ACCEPT_ATTR, MAX_LABEL } from '../lib/media.js';
+import { LANGS } from '../lib/i18n.js';
 
 const NAV = [
   { group: '概览', items: [
@@ -467,19 +468,33 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
             <span class="an-note">英文留空时前台自动回退显示中文</span>
           </div>
           <div class="ad-card-body">
-            <!-- Bilingual text fields: Chinese on the left, English on the
-                 right. A blank English field means "not translated yet". -->
-            <div class="ad-field">
-              <label for="name">工具名称 *</label>
-              <div class="ad-i18n-pair">
-                <input class="ad-input" id="name" name="name" required maxlength="80"
-                  value="${esc(t.name || '')}" placeholder="中文名称，例如：文心一言">
-                <input class="ad-input" id="name_en" name="name_en" maxlength="80"
-                  value="${esc(t.name_en || '')}" placeholder="English name, e.g. ERNIE Bot（留空沿用原名）">
-              </div>
+            <!-- Bilingual fields.
+                 One language is shown at a time, chosen by the tab strip at the
+                 top of the card. Every input stays in the DOM (hidden ones use
+                 the hidden attribute, not removal) so the whole form still
+                 submits in one POST; the language list comes from LANGS so
+                 adding a locale later means one more entry in that table. -->
+            <div class="ad-lang-tabs" role="tablist" aria-label="编辑语言">
+              ${LANGS.map((l, i) => `<button class="ad-lang-tab ${i === 0 ? 'is-active' : ''}" type="button"
+                role="tab" data-form-lang="${esc(l.code)}"
+                aria-selected="${i === 0 ? 'true' : 'false'}">
+                ${esc(l.short)}<span class="ad-lang-tab-label">${esc(l.label)}</span>
+                <span class="ad-lang-dot" data-lang-dot="${esc(l.code)}" hidden title="已填写"></span>
+              </button>`).join('')}
             </div>
+
             <div class="ad-field">
-              <label for="url">官网链接 *</label>
+              <label for="name">工具名称 <span class="ad-req">*</span></label>
+              ${LANGS.map((l, i) => `<input class="ad-input" data-lang-field="${esc(l.code)}"
+                id="${i === 0 ? 'name' : `name_${l.code}`}" name="${i === 0 ? 'name' : `name_${l.code}`}"
+                ${i === 0 ? 'required' : ''} maxlength="80" ${i === 0 ? '' : 'hidden'}
+                value="${esc(i === 0 ? (t.name || '') : (t[`name_${l.code}`] || ''))}"
+                placeholder="${esc(i === 0 ? '中文名称，例如：文心一言' : `Name in ${l.label} (optional)`)}">`).join('')}
+              <div class="ad-hint">其他语言留空时，前台会回退显示中文名称。</div>
+            </div>
+
+            <div class="ad-field">
+              <label for="url">官网链接 <span class="ad-req">*</span></label>
               <input class="ad-input" id="url" name="url" type="url" required value="${esc(t.url || '')}" placeholder="https://example.com">
             </div>
             <div class="ad-field">
@@ -487,23 +502,25 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
               <input class="ad-input" id="slug" name="slug" value="${esc(t.slug || '')}" placeholder="留空自动生成">
               <div class="ad-hint">前台详情页地址：/tools/<span id="slugPreview">${esc(t.slug || 'auto')}</span></div>
             </div>
+
             <div class="ad-field">
               <label for="description">简介</label>
-              <div class="ad-i18n-pair ad-i18n-pair-col">
-                <textarea class="ad-textarea" id="description" name="description" maxlength="600"
-                  placeholder="中文简介：一句话说明这个工具做什么、适合谁用">${esc(t.description || '')}</textarea>
-                <textarea class="ad-textarea" id="description_en" name="description_en" maxlength="600"
-                  placeholder="English description (optional)">${esc(t.description_en || '')}</textarea>
-              </div>
+              ${LANGS.map((l, i) => `<textarea class="ad-textarea" data-lang-field="${esc(l.code)}"
+                id="${i === 0 ? 'description' : `description_${l.code}`}"
+                name="${i === 0 ? 'description' : `description_${l.code}`}"
+                maxlength="600" ${i === 0 ? '' : 'hidden'}
+                placeholder="${esc(i === 0 ? '中文简介：一句话说明这个工具做什么、适合谁用' : `Description in ${l.label} (optional)`)}">${esc(i === 0 ? (t.description || '') : (t[`description_${l.code}`] || ''))}</textarea>`).join('')}
               <div class="ad-hint">建议 40–160 字，显示在卡片上（最多 3 行）。</div>
             </div>
+
             <div class="ad-field">
               <label for="tags">标签</label>
-              <div class="ad-i18n-pair">
-                <input class="ad-input" id="tags" name="tags" value="${esc((t.tags || []).join(', '))}" placeholder="对话, 写作, 多模态">
-                <input class="ad-input" id="tags_en" name="tags_en" value="${esc(t.tags_en || '')}" placeholder="chat, writing, multimodal">
-              </div>
-              <div class="ad-hint">用英文逗号分隔，最多显示 4 个。英文留空则沿用中文标签。</div>
+              ${LANGS.map((l, i) => `<input class="ad-input" data-lang-field="${esc(l.code)}"
+                id="${i === 0 ? 'tags' : `tags_${l.code}`}" name="${i === 0 ? 'tags' : `tags_${l.code}`}"
+                ${i === 0 ? '' : 'hidden'}
+                value="${esc(i === 0 ? (t.tags || []).join(', ') : (t[`tags_${l.code}`] || ''))}"
+                placeholder="${esc(i === 0 ? '对话, 写作, 多模态' : `Tags in ${l.label}, comma separated`)}">`).join('')}
+              <div class="ad-hint">用英文逗号分隔，最多显示 4 个。其他语言留空则沿用中文标签。</div>
             </div>
           </div>
         </div>
@@ -1005,6 +1022,52 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
         });
 
         renderCardPreview();
+      })();
+
+      /* -------------------------- language tabs for the basic-info fields */
+      /* One language at a time. Fields are toggled with the hidden attribute
+         rather than removed, so the entire form still submits in a single POST
+         regardless of which tab is active.
+
+         A dot next to a tab marks a language that already has content, so an
+         untranslated locale is visible without opening it. */
+      (function(){
+        var tabs = Array.prototype.slice.call(document.querySelectorAll('[data-form-lang]'));
+        var fields = Array.prototype.slice.call(document.querySelectorAll('[data-lang-field]'));
+        if (!tabs.length || !fields.length) return;
+
+        function apply(code) {
+          tabs.forEach(function(t){
+            var on = t.getAttribute('data-form-lang') === code;
+            t.classList.toggle('is-active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+          fields.forEach(function(f){
+            f.hidden = f.getAttribute('data-lang-field') !== code;
+          });
+          // Keep the browser's focus in the newly shown field for the label
+          // currently being edited, so tabbing does not jump to nowhere.
+          try { document.activeElement && document.activeElement.blur(); } catch (e) {}
+        }
+
+        function refreshDots() {
+          tabs.forEach(function(t){
+            var code = t.getAttribute('data-form-lang');
+            var filled = fields.some(function(f){
+              return f.getAttribute('data-lang-field') === code && String(f.value || '').trim() !== '';
+            });
+            var dot = t.querySelector('[data-lang-dot]');
+            if (dot) dot.hidden = !filled;
+          });
+        }
+
+        tabs.forEach(function(t){
+          t.addEventListener('click', function(){ apply(t.getAttribute('data-form-lang')); });
+        });
+        fields.forEach(function(f){ f.addEventListener('input', refreshDots); });
+
+        apply(tabs[0].getAttribute('data-form-lang'));
+        refreshDots();
       })();
     </script>
   `;

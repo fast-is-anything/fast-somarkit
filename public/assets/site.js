@@ -513,4 +513,66 @@
       }
     } catch (err) {}
   });
+
+  /* ------------------------------------------------------ homepage rails */
+  /*
+   * Each category section on the homepage ships only its first page of cards.
+   * A sentinel below the grid starts an IntersectionObserver that fetches the
+   * next page from /api/rail and appends it before the sentinel scrolls into
+   * view — the next page is prefetched, so scrolling stays seamless.
+   *
+   * All state lives on the section element (dataset), so a reset only needs to
+   * drop the appended cards.
+   */
+  (function initRails() {
+    var sections = document.querySelectorAll('.category-section[data-has-more="1"]');
+    if (!sections.length || !('IntersectionObserver' in window)) return;
+
+    var localeMatch = location.pathname.match(/^\/(zh|en)(?=\/|$)/);
+    var locale = localeMatch ? localeMatch[1] : 'zh';
+    var RAIL_API = '/' + locale + '/api/rail';
+
+    function loadMore(sec) {
+      if (sec.dataset.loading === '1' || sec.dataset.done === '1') return;
+      sec.dataset.loading = '1';
+
+      var params = new URLSearchParams({ category: sec.getAttribute('data-category') });
+      if (sec.dataset.cursor) params.set('cursor', sec.dataset.cursor);
+
+      fetch(RAIL_API + '?' + params.toString(), { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          sec.dataset.loading = '0';
+          if (!data || !data.ok) { sec.dataset.done = '1'; return; }
+
+          var grid = sec.querySelector('[data-rail-grid]');
+          if (data.html) grid.insertAdjacentHTML('beforeend', data.html);
+
+          if (data.nextCursor) {
+            sec.dataset.cursor = data.nextCursor;
+          } else {
+            sec.dataset.done = '1';
+            sec.setAttribute('data-has-more', '0');
+            var sentinel = sec.querySelector('[data-rail-sentinel]');
+            if (sentinel) sentinel.remove();
+          }
+        })
+        .catch(function () { sec.dataset.loading = '0'; });
+    }
+
+    var io = new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        if (!entries[i].isIntersecting) continue;
+        var sec = entries[i].target.closest('.category-section');
+        if (sec) loadMore(sec);
+      }
+    }, {
+      // Start fetching well before the sentinel is visible so the appended
+      // cards are already there when the user arrives.
+      rootMargin: '600px 0px',
+    });
+
+    var sentinels = document.querySelectorAll('[data-rail-sentinel]');
+    for (var i = 0; i < sentinels.length; i++) io.observe(sentinels[i]);
+  })();
 })();

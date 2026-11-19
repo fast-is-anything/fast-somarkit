@@ -921,6 +921,23 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 }
 .cat-count { font-size: var(--text-sm); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 
+/* "View all" link on a homepage rail: pushed to the right of the section
+   header, only shown when the rail had to truncate. */
+.category-section-header .section-more {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--transition-fast);
+}
+.category-section-header .section-more:hover { color: var(--color-primary); }
+
+/* Markup the infinite-scroll observer watches. Zero-height and invisible:
+   it only exists to trigger loading before the rail's end is reached. */
+.rail-sentinel { height: 1px; margin-top: 8px; }
+
 .tools-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));

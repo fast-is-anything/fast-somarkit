@@ -8,6 +8,13 @@ import { logoGlyph } from '../lib/logo.js';
 import { t, pricingLabel, LANGS, normalizeLang, localePath, splitLocale, DEFAULT_LANG } from '../lib/i18n.js';
 import { renderMarkdown } from '../lib/markdown.js';
 
+/**
+ * How many cards each homepage rail renders up front. Must stay in sync with
+ * the default limit of /api/rail so the first streamed page continues exactly
+ * where the server-rendered one stopped.
+ */
+export const RAIL_PAGE_SIZE = 9;
+
 function brandMark() {
   return `<span class="brand-mark" aria-hidden="true">${logoGlyph(22)}</span>`;
 }
@@ -362,7 +369,7 @@ function logoBox(tool, cls) {
   return `<span class="logo-tile ${cls}" role="img" aria-label="${label}"><span class="logo-text" aria-hidden="true">${esc(initials(tool.name))}</span></span>`;
 }
 
-function toolCard(item, lang = 'zh') {
+export function toolCard(item, lang = 'zh') {
   const tags = item.tags.slice(0, 4).map((tag) => `<span class="tool-tag">${esc(tag)}</span>`).join('');
   const haystack = [item.name, item.description, item.tags.join(' '), item.category_name, hostOf(item.url)]
     .filter(Boolean).join(' ').toLowerCase();
@@ -414,13 +421,28 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = 'zh
       const cards = g.tools.map((tool) => toolCard(tool, lang)).join('\n');
       const isActiveSection = !restrictToActive || g.category.slug === activeSlug;
       const hiddenAttr = isActiveSection ? '' : ' style="display:none"';
-      return `<section class="category-section" id="cat-${esc(g.category.slug)}" data-category="${esc(g.category.slug)}" data-total="${g.tools.length}"${hiddenAttr}>
+      // A rail shows the first page only; the rest streams in on scroll and
+      // the "全部" button jumps to the full category page.
+      const shown = g.tools.length;
+      const more = g.remaining > 0;
+      // Where the next page starts. The API returns the same (sortOrder, id)
+      // shape, so page 2 continues exactly after page 1.
+      const last = shown ? g.tools[shown - 1] : null;
+      const cursorAttr = more && last
+        ? ` data-cursor="${Number(last.sort_order) || 0}:${encodeURIComponent(last.name || '')}:${last.id}"`
+        : '';
+      return `<section class="category-section" id="cat-${esc(g.category.slug)}"
+        data-category="${esc(g.category.slug)}"
+        data-total="${g.total ?? shown}"
+        data-has-more="${more ? '1' : '0'}"${cursorAttr}${hiddenAttr}>
         <div class="category-section-header">
           <span class="cat-icon">${icon(g.category.icon)}</span>
           <span class="cat-name">${esc(categoryLabel(g.category, lang))}</span>
-          <span class="cat-count">${esc(t(lang, 'content.total', g.tools.length))}</span>
+          <span class="cat-count">${esc(t(lang, 'content.total', g.total ?? shown))}</span>
+          ${more ? `<a class="section-more" href="${esc(localePath(lang, `/${g.category.slug}`))}">${esc(t(lang, 'content.viewAll'))} →</a>` : ''}
         </div>
-        <div class="tools-grid">${cards}</div>
+        <div class="tools-grid" data-rail-grid>${cards}</div>
+        ${more ? `<div class="rail-sentinel" data-rail-sentinel aria-hidden="true"></div>` : ''}
       </section>`;
     })
     .join('\n');
@@ -490,7 +512,7 @@ ${pageLoader()}
 }
 
 /** Group published tools by category, in category order. */
-function groupByCategory(categories, tools) {
+function groupByCategory(categories, tools, perGroup = 0) {
   const byId = new Map();
   for (const c of categories) byId.set(c.id, { category: c, tools: [] });
   const orphan = [];
@@ -498,11 +520,24 @@ function groupByCategory(categories, tools) {
     const g = byId.get(t.category_id);
     if (g) g.tools.push(t); else orphan.push(t);
   }
-  const groups = [...byId.values()].filter((g) => g.tools.length > 0);
+  let groups = [...byId.values()].filter((g) => g.tools.length > 0);
   if (orphan.length) {
     groups.push({
       category: { id: 0, slug: 'uncategorized', name: '未分类', icon: 'grid' },
       tools: orphan,
+    });
+  }
+  // Keep only the first page per rail and record how many were withheld, so the
+  // section can render a "View all" link and stream the rest on scroll.
+  if (perGroup > 0) {
+    groups = groups.map((g) => {
+      const total = g.tools.length;
+      return {
+        ...g,
+        tools: g.tools.slice(0, perGroup),
+        total,
+        remaining: Math.max(0, total - perGroup),
+      };
     });
   }
   return groups;
@@ -511,7 +546,9 @@ function groupByCategory(categories, tools) {
 // --- pages ------------------------------------------------------------------
 
 export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = 'zh', gaId = '', basePath = '/' }) {
-  const groups = groupByCategory(categories, tools);
+  // Each rail shows the first RAIL_PAGE_SIZE tools; the rest stream in on
+  // scroll via /api/rail, and "View all" jumps to the full category page.
+  const groups = groupByCategory(categories, tools, RAIL_PAGE_SIZE);
   const siteDesc = t(lang, 'seo.siteDesc');
   const jsonLd = [
     {

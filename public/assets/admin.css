@@ -781,18 +781,50 @@ table.ad-table {
 /* Per-language summary rows on the tool form. */
 .ad-md-lang-row { display: flex; align-items: baseline; gap: 8px; }
 .ad-md-lang-row .spacer { flex: 1; }
+
+/* Language tab strip on the tool form: one language is edited at a time. */
+.ad-lang-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 18px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--ad-surface-2);
+  border: 1px solid var(--ad-border-soft);
+}
+.ad-lang-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ad-text-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--ad-transition), color var(--ad-transition);
+}
+.ad-lang-tab:hover { color: var(--ad-text); }
+.ad-lang-tab.is-active {
+  background: var(--ad-surface);
+  color: var(--ad-text);
+  box-shadow: var(--ad-shadow-sm);
+}
+.ad-lang-tab-label { font-weight: 400; color: var(--ad-text-3); }
+.ad-lang-tab.is-active .ad-lang-tab-label { color: var(--ad-text-2); }
+/* Marks a language that already has content. */
+.ad-lang-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--ad-success, #22C55E);
+}
+.ad-lang-dot[hidden] { display: none; }
+/* Required-field marker, kept out of the label text for screen readers. */
+.ad-req { color: var(--ad-danger, #EF4444); }
 /* One language block: header row + its preview, separated from the next. */
 .ad-md-block + .ad-md-block { margin-top: 16px; }
 .ad-md-block .ad-md-preview { margin-top: 8px; }
-/* Bilingual text inputs: Chinese and English side by side, so an empty
-   translation is immediately visible. */
-.ad-i18n-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
-.ad-i18n-pair-col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.ad-i18n-pair .ad-textarea { min-height: 96px; }
-@media (max-width: 900px) {
-  /* Side by side is too cramped on narrow screens; stack instead. */
-  .ad-i18n-pair, .ad-i18n-pair-col { grid-template-columns: 1fr; }
-}
 .ad-md-lang-tag {
   flex-shrink: 0;
   font-size: 10.5px; font-weight: 600; letter-spacing: .04em;

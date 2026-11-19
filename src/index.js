@@ -4,7 +4,7 @@
 
 import { esc, json, redirect, getCookie, setCookie, sign, secureIfHttps } from './lib/crypto.js';
 import {
-  listCategories, listCategoriesPage, countToolsByCategory, listPublishedTools, listFeaturedTools, listTrendingTools,
+  listCategories, listCategoriesPage, countToolsByCategory, listPublishedTools, listFeaturedTools, listToolsPage, listTrendingTools,
   getToolBySlug, getTool, listToolsAdmin, createTool, updateTool, deleteTool,
   incrementVisits, getCategoryBySlug, getCategory, createCategory, updateCategory,
   deleteCategory, slugify, logAudit, listAudit, listAuditPage, dashboardStats, topTools,
@@ -21,7 +21,7 @@ import {
   localizeTool, localizeTools, localizeCategory, localizeCategories,
 } from './lib/localize.js';
 import { ICONS } from './lib/icons.js';
-import { homePage, toolPage, categoryPage, aboutPage, notFoundPage, submitPage, submitSuccessPage } from './templates/public.js';
+import { homePage, toolPage, categoryPage, aboutPage, notFoundPage, submitPage, submitSuccessPage, toolCard } from './templates/public.js';
 import {
   dashboardPage, toolsPage, toolFormPage, categoriesPage, categoryFormPage,
   auditPage, adminsPage, loginPage,
@@ -180,6 +180,51 @@ async function router(request, env, ctx) {
         description: t.description, category: t.category_name, pricing: t.pricing,
       }));
     return json({ query: q, count: results.length, results });
+  }
+
+  // Homepage rail pagination.
+  //
+  //   GET /zh/api/rail?category=ai-chat&cursor=<sortOrder>:<id>&limit=9
+  //
+  // Returns one page of cards as HTML plus the next cursor, so the client can
+  // append without re-rendering the card markup itself. `category=all` spans
+  // the whole catalogue.
+  if ((pubPath === '/api/rail' || path === '/api/rail') && method === 'GET') {
+    const slug = String(url.searchParams.get('category') || 'all');
+    const limit = Math.max(1, Math.min(30, Number(url.searchParams.get('limit')) || 9));
+
+    // Cursor is "sortOrder:<name>:<id>" (name is URI-encoded); opaque to the
+    // client, decoded and validated here.
+    let after = null;
+    const raw = url.searchParams.get('cursor');
+    if (raw) {
+      const [s, name, i] = String(raw).split(':');
+      const sortOrder = Number(s);
+      const id = Number(i);
+      if (Number.isFinite(sortOrder) && Number.isFinite(id)) {
+        after = { sortOrder, name: decodeURIComponent(name || ''), id };
+      }
+    }
+
+    let categoryId = null;
+    let category = null;
+    if (slug !== 'all') {
+      category = await getCategoryBySlug(env.DB, slug);
+      if (!category) return json({ ok: false, error: 'unknown category' }, 404);
+      categoryId = category.id;
+    }
+
+    const { tools, nextCursor } = await listToolsPage(env.DB, { categoryId, limit, after });
+    const localized = localizeTools(tools, lang);
+    return json({
+      ok: true,
+      category: slug,
+      html: localized.map((x) => toolCard(x, lang)).join(''),
+      count: localized.length,
+      nextCursor: nextCursor
+        ? `${nextCursor.sortOrder}:${encodeURIComponent(nextCursor.name)}:${nextCursor.id}`
+        : null,
+    });
   }
 
   // --------------------------------------------------------------- admin ---

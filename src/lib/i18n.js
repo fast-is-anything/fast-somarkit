@@ -89,6 +89,7 @@ const DICT = {
     'content.filtered': (n) => `筛选出 ${n} 个工具`,
     'content.filterAria': '按定价筛选',
     'content.total': (n) => `共 ${n} 个`,
+    'content.viewAll': '查看全部',
     'content.matched': (n, t) => `匹配 ${n} / ${t} 个`,
 
     'pricing.all': '全部',
@@ -198,6 +199,7 @@ const DICT = {
     'content.filtered': (n) => `${n} tools matched`,
     'content.filterAria': 'Filter by pricing',
     'content.total': (n) => `${n} total`,
+    'content.viewAll': 'View all',
     'content.matched': (n, t) => `${n} of ${t}`,
 
     'pricing.all': 'All',
