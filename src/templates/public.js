@@ -9,9 +9,8 @@ import { t, pricingLabel, LANGS, normalizeLang, localePath, splitLocale, DEFAULT
 import { renderMarkdown } from '../lib/markdown.js';
 
 /**
- * How many cards each homepage rail renders up front. Must stay in sync with
- * the default limit of /api/rail so the first streamed page continues exactly
- * where the server-rendered one stopped.
+ * How many cards each homepage rail renders. A rail is a fixed preview — it
+ * never streams more; readers follow the "View all" link for the full list.
  */
 export const RAIL_PAGE_SIZE = 9;
 
@@ -439,20 +438,14 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEF
       const cards = g.tools.map((tool) => toolCard(tool, lang)).join('\n');
       const isActiveSection = !restrictToActive || g.category.slug === activeSlug;
       const hiddenAttr = isActiveSection ? '' : ' style="display:none"';
-      // A rail shows the first page only; the rest streams in on scroll and
-      // the "全部" button jumps to the full category page.
+      // A rail is a fixed preview: the first page only, never streamed. Readers
+      // who want the rest follow the "View all" link to the full category page,
+      // so the homepage keeps a stable length.
       const shown = g.tools.length;
       const more = g.remaining > 0;
-      // Where the next page starts. The API returns the same (sortOrder, id)
-      // shape, so page 2 continues exactly after page 1.
-      const last = shown ? g.tools[shown - 1] : null;
-      const cursorAttr = more && last
-        ? ` data-cursor="${Number(last.sort_order) || 0}:${encodeURIComponent(last.name || '')}:${last.id}"`
-        : '';
       return `<section class="category-section" id="cat-${esc(g.category.slug)}"
         data-category="${esc(g.category.slug)}"
-        data-total="${g.total ?? shown}"
-        data-has-more="${more ? '1' : '0'}"${cursorAttr}${hiddenAttr}>
+        data-total="${g.total ?? shown}"${hiddenAttr}>
         <div class="category-section-header">
           <span class="cat-icon">${icon(g.category.icon)}</span>
           <span class="cat-name">${esc(categoryLabel(g.category, lang))}</span>
@@ -460,7 +453,6 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEF
           ${more ? `<a class="section-more" href="${esc(localePath(lang, `/${g.category.slug}`))}">${esc(t(lang, 'content.viewAll'))} →</a>` : ''}
         </div>
         <div class="tools-grid" data-rail-grid>${cards}</div>
-        ${more ? `<div class="rail-sentinel" data-rail-sentinel aria-hidden="true"></div>` : ''}
       </section>`;
     })
     .join('\n');
@@ -564,8 +556,8 @@ function groupByCategory(categories, tools, perGroup = 0) {
 // --- pages ------------------------------------------------------------------
 
 export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
-  // Each rail shows the first RAIL_PAGE_SIZE tools; the rest stream in on
-  // scroll via /api/rail, and "View all" jumps to the full category page.
+  // Each rail shows at most RAIL_PAGE_SIZE tools; the rest are reachable from
+  // the category page linked by "View all".
   const groups = groupByCategory(categories, tools, RAIL_PAGE_SIZE);
   const siteDesc = t(lang, 'seo.siteDesc');
   const jsonLd = [
