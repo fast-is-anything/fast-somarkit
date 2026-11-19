@@ -64,7 +64,8 @@
       }
       return;
     }
-    // Choosing an option navigates to ?lang=<code>; the server persists it.
+    // Language options are ordinary links to the same page in the other
+    // locale (/zh/… ⇄ /en/…), so let the browser follow them.
     if (t.closest('.lang-option')) { closeLangMenus(); return; }
     if (!t.closest('.lang-switcher')) closeLangMenus();
   });
@@ -295,7 +296,9 @@
     var catEl = t.closest('[data-category]:not(.tool-card):not(.category-section)');
     if (catEl && catEl.classList.contains('category-item')) {
       var cat = catEl.getAttribute('data-category');
-      var target = cat === 'all' ? '/' : '/' + encodeURIComponent(cat);
+      // Keep the current locale prefix so the address bar stays in-language.
+      var langPrefix = (location.pathname.match(/^\/(zh|en)(?=\/|$)/) || [''])[0];
+      var target = cat === 'all' ? (langPrefix || '/') : langPrefix + '/' + encodeURIComponent(cat);
 
       // Every listing page ships the full catalogue, so switching category is
       // always a client-side view change: no navigation, no loader, no wait.
@@ -419,10 +422,13 @@
   }
 
   // Keep the listing in sync when the user moves through history (back /
-  // forward after a client-side category switch).
+  // forward). Category links are real URLs now, so strip the locale prefix
+  // before reading the slug.
   window.addEventListener('popstate', function () {
     if (!container) return;
-    var slug = location.pathname.replace(/^\/+|\/+$/g, '') || 'all';
+    var slug = location.pathname
+      .replace(/^\/(zh|en)(?=\/|$)/, '')   // drop the locale prefix
+      .replace(/^\/+|\/+$/g, '') || 'all';
     if (slug === 'all') state.category = 'all';
     else if (document.getElementById('cat-' + slug)) state.category = slug;
     else return; // not a listing route; let the browser handle it

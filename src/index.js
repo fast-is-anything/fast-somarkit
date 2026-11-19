@@ -32,7 +32,7 @@ import {
   beginLogin, completeLogin, currentAdmin, logout, adminAllowList, isConfigured,
   SESSION_COOKIE, redirectUri,
 } from './lib/auth.js';
-import { normalizeLang, LANG_COOKIE } from './lib/i18n.js';
+import { normalizeLang, LANGS, splitLocale, localePath, DEFAULT_LANG } from './lib/i18n.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -90,32 +90,31 @@ async function router(request, env, ctx) {
   // GA4 measurement id for the public pages; empty string disables the tag.
   const gaId = String(env.GA_MEASUREMENT_ID || '').trim();
 
-  // Language: an explicit ?lang= wins (and is persisted in a cookie); otherwise
-  // the stored cookie, otherwise Chinese.
+  // Language comes from the URL prefix alone (`/zh/...` or `/en/...`).
   //
-  // Deliberately NOT derived from Accept-Language: Googlebot sends
-  // `Accept-Language: en`, so guessing would make the crawler index the English
-  // rendering of every Chinese URL. The Chinese site is the canonical one;
-  // English lives at `?lang=en` and is advertised through hreflang.
-  const explicitLang = url.searchParams.get('lang');
-  const lang = normalizeLang(explicitLang || getCookie(request, LANG_COOKIE) || 'zh');
-  const setLangCookie = explicitLang
-    ? setCookie(LANG_COOKIE, lang, { maxAge: 60 * 60 * 24 * 365, httpOnly: false, secure: false })
-    : null;
+  // There is no cookie and no Accept-Language sniffing: Googlebot sends
+  // `Accept-Language: en`, so any guess would make the crawler index a language
+  // the URL does not advertise. One URL = one language, always.
+  const loc = splitLocale(path);
+  const lang = loc.lang || DEFAULT_LANG;
+  // Public paths are language-neutral ("/tools/chatgpt"); helpers below add the
+  // prefix back so every generated link carries it.
+  const pubPath = loc.rest;
+
+  /** Build an in-site public URL for the current language. */
+  const L = (p) => localePath(lang, p);
+
   /**
-   * Attach the language cookie (if the user just switched) and an explicit
-   * cache policy. Without a Cache-Control header browsers apply *heuristic*
-   * caching and may keep serving a stale page long after a deploy — so every
-   * public HTML response must state its policy explicitly.
+   * Attach an explicit cache policy. Without a Cache-Control header browsers
+   * apply *heuristic* caching and may keep serving a stale page long after a
+   * deploy — so every public HTML response must state its policy explicitly.
    */
   const withLang = (res) => {
-    if (setLangCookie) res.headers.append('Set-Cookie', setLangCookie);
     if (!res.headers.has('Cache-Control')) {
       // `s-maxage` keeps Cloudflare's edge copy short; `must-revalidate`
       // stops the browser from reusing it without asking.
       res.headers.set('Cache-Control', 'public, max-age=0, s-maxage=60, must-revalidate');
     }
-    res.headers.set('Vary', 'Cookie');
     return res;
   };
 
@@ -162,7 +161,9 @@ async function router(request, env, ctx) {
     });
   }
 
-  if (path === '/api/search' && method === 'GET') {
+  // Public API: accepts an optional locale prefix (/zh/api/search) so the
+  // client can request a language; unprefixed falls back to the default.
+  if ((pubPath === '/api/search' || path === '/api/search') && method === 'GET') {
     const q = (url.searchParams.get('q') || '').trim().toLowerCase();
     const tools = await loadPublished(env.DB, lang);
     // Match BOTH languages regardless of the visitor's language: someone on the
@@ -187,43 +188,54 @@ async function router(request, env, ctx) {
   }
 
   // ------------------------------------------------------- public routes ---
-  if (path === '/' || path === '/index.html') {
-    return withLang(await renderHome(request, env, theme, lang, gaId));
+  //
+  // Everything below is a public page and must carry a locale prefix. A
+  // request without one is a 404 by design: giving every page exactly one
+  // address avoids duplicate content and keeps hreflang honest.
+  if (!loc.matched) {
+    return new Response('Not Found', {
+      status: 404,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    });
   }
-  if (path === '/about') {
+
+  if (pubPath === '/' || pubPath === '/index.html') {
+    return withLang(await renderHome(request, env, theme, lang, gaId, pubPath));
+  }
+  if (pubPath === '/about') {
     const [categories, counts, tools] = await Promise.all([
       loadCategories(env.DB, lang),
       countToolsByCategory(env.DB),
       loadPublished(env.DB, lang),
     ]);
-    return withLang(aboutPage({ categories, counts, total: tools.length, theme, lang, gaId }));
+    return withLang(aboutPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath }));
   }
 
   // ------------------------------------------------------ submit a tool ---
-  if (path === '/submit') {
+  if (pubPath === '/submit') {
     if (method === 'GET') {
       const [categories, counts, tools] = await Promise.all([
         loadCategories(env.DB, lang),
         countToolsByCategory(env.DB),
         loadPublished(env.DB, lang),
       ]);
-      return withLang(submitPage({ categories, counts, total: tools.length, theme, lang, gaId }));
+      return withLang(submitPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath }));
     }
     if (method === 'POST') {
-      return withLang(await handleSubmit(request, env, theme, lang, gaId));
+      return withLang(await handleSubmit(request, env, theme, lang, gaId, pubPath));
     }
   }
-  if (path === '/submit/thanks') {
+  if (pubPath === '/submit/thanks') {
     const [categories, counts, tools] = await Promise.all([
       loadCategories(env.DB, lang),
       countToolsByCategory(env.DB),
       loadPublished(env.DB, lang),
     ]);
-    return withLang(submitSuccessPage({ categories, counts, total: tools.length, theme, lang, gaId }));
+    return withLang(submitSuccessPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath }));
   }
 
-  if (path.startsWith('/tools/')) {
-    const slug = path.slice(7);
+  if (pubPath.startsWith('/tools/')) {
+    const slug = pubPath.slice(7);
     const tool = await loadToolBySlug(env.DB, lang, slug);
     if (tool && tool.status !== 'draft') {
       const [categories, counts, allTools] = await Promise.all([
@@ -238,20 +250,20 @@ async function router(request, env, ctx) {
         : related.concat(allTools.filter((x) => x.id !== tool.id && x.category_id !== tool.category_id)).slice(0, 6);
       return withLang(toolPage({
         tool, categories, counts, related: fallback,
-        total: allTools.length, theme, lang, gaId,
+        total: allTools.length, theme, lang, gaId, basePath: pubPath,
       }));
     }
   }
 
   // ----------------------------------------------------------------- SEO ---
-  if (path === '/sitemap.xml') {
+  if (pubPath === '/sitemap.xml' && loc.matched) {
     const [categories, tools] = await Promise.all([
       loadCategories(env.DB, lang),
       loadPublished(env.DB, lang),
     ]);
     return sitemap(categories, tools);
   }
-  if (path === '/robots.txt') {
+  if (pubPath === '/robots.txt' && loc.matched) {
     return new Response(
       `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api\n\nSitemap: https://somarkit.com/sitemap.xml\n`,
       { headers: { 'content-type': 'text/plain; charset=utf-8' } }
@@ -265,25 +277,25 @@ async function router(request, env, ctx) {
   }
 
   // Legacy: category pages used to live under /c/<slug>. Keep old links and
-  // indexed URLs working with a permanent redirect to the root-level path.
-  if (path.startsWith('/c/')) {
-    const slug = path.slice(3);
+  // indexed URLs working with a permanent redirect to the locale-root path.
+  if (pubPath.startsWith('/c/')) {
+    const slug = pubPath.slice(3);
     const category = slug && !slug.includes('/') ? await loadCategoryBySlug(env.DB, lang, slug) : null;
     if (category) {
       const qs = url.search || '';
       return new Response(null, {
         status: 301,
-        headers: { Location: `/${category.slug}${qs}`, 'cache-control': 'public, max-age=86400' },
+        headers: { Location: `${L(`/${category.slug}`)}${qs}`, 'cache-control': 'public, max-age=86400' },
       });
     }
   }
 
   // ------------------------------------------------- category (catch-all) ---
-  // Category pages live at the site root (/ai-coding) rather than under a /c/
-  // prefix. This runs last so it can never shadow a real route, an asset, or
-  // a tool page — only single-segment paths that match a category slug.
-  if (path !== '/' && !path.includes('/', 1)) {
-    const slug = path.slice(1);
+  // Category pages live at the locale root (/zh/ai-coding) rather than under a
+  // /c/ prefix. This runs last so it can never shadow a real route, an asset,
+  // or a tool page — only single-segment paths that match a category slug.
+  if (pubPath !== '/' && !pubPath.includes('/', 1)) {
+    const slug = pubPath.slice(1);
     const category = await loadCategoryBySlug(env.DB, lang, slug);
     if (category && category.visible) {
       const [categories, counts, allTools, featured] = await Promise.all([
@@ -295,7 +307,8 @@ async function router(request, env, ctx) {
       const tools = allTools.filter((x) => x.category_id === category.id);
       return withLang(categoryPage({
         category, categories, counts, tools, allTools, featured,
-        total: allTools.length, catCount: categories.length, theme, lang,
+        total: allTools.length, catCount: categories.length, theme, lang, gaId,
+        basePath: pubPath,
       }));
     }
   }
@@ -305,12 +318,12 @@ async function router(request, env, ctx) {
     countToolsByCategory(env.DB),
     loadPublished(env.DB, lang),
   ]);
-  return withLang(notFoundPage({ categories, counts, total: tools.length, theme, lang, gaId }));
+  return withLang(notFoundPage({ categories, counts, total: tools.length, theme, lang, gaId, basePath: pubPath }));
 }
 
 // --- public render ----------------------------------------------------------
 
-async function renderHome(request, env, theme, lang = 'zh', gaId = '') {
+async function renderHome(request, env, theme, lang = 'zh', gaId = '', basePath = '/') {
   const [categories, counts, tools, featured] = await Promise.all([
     loadCategories(env.DB, lang),
     countToolsByCategory(env.DB),
@@ -322,7 +335,7 @@ async function renderHome(request, env, theme, lang = 'zh', gaId = '') {
     categories, counts, tools, featured,
     total: tools.length,
     catCount: categories.length,
-    theme, lang, gaId,
+    theme, lang, gaId, basePath,
   });
   // Cache policy is set centrally in withLang(); only the edge TTL is widened
   // here because the home listing is the hottest page.
@@ -334,25 +347,40 @@ async function renderHome(request, env, theme, lang = 'zh', gaId = '') {
 function sitemap(categories, tools) {
   const base = 'https://somarkit.com';
   const today = new Date().toISOString().slice(0, 10);
+
+  // Every page is listed once per locale, and each entry advertises all of its
+  // translations via xhtml:link so search engines tie the pair together
+  // instead of treating them as duplicate content.
+  const entry = (neutralPath, lastmod, changefreq, priority) => {
+    const body = LANGS.map((l) => `  <url>
+    <loc>${base}${localePath(l.code, neutralPath)}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+${LANGS.map((x) => `    <xhtml:link rel="alternate" hreflang="${x.code}" href="${base}${localePath(x.code, neutralPath)}"/>`).join('\n')}
+  </url>`);
+    return body;
+  };
+
   const urls = [
-    `<url><loc>${base}/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`,
-    `<url><loc>${base}/about</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>`,
-    ...categories.map((c) =>
-      `<url><loc>${base}/${c.slug}</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>`),
-    // A tool can be excluded from the sitemap on its own, and a noindex page
-    // must never be advertised in the sitemap either.
-    ...tools.filter((t) => t.in_sitemap !== 0 && t.noindex !== 1).map((t) =>
-      `<url><loc>${base}/tools/${t.slug}</loc><lastmod>${String(t.updated_at).slice(0, 10)}</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>`),
+    ...entry('/', today, 'daily', '1.0'),
+    ...entry('/about', today, 'monthly', '0.4'),
+    ...categories.flatMap((c) => entry(`/${c.slug}`, today, 'weekly', '0.8')),
+    // A tool can opt out of the sitemap, and a noindex page must never be
+    // advertised here either.
+    ...tools
+      .filter((t) => t.in_sitemap !== 0 && t.noindex !== 1)
+      .flatMap((t) => entry(`/tools/${t.slug}`, String(t.updated_at).slice(0, 10), 'weekly', '0.6')),
   ];
   return new Response(
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>`,
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls.join('\n')}\n</urlset>`,
     { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } }
   );
 }
 
 // --- public: submit a tool --------------------------------------------------
 
-async function handleSubmit(request, env, theme, lang, gaId) {
+async function handleSubmit(request, env, theme, lang, gaId, basePath = '/') {
   let form;
   try {
     form = await request.formData();
@@ -380,7 +408,7 @@ async function handleSubmit(request, env, theme, lang, gaId) {
       loadPublished(env.DB, lang),
     ]);
     return submitPage({
-      categories, counts, total: tools.length, theme, lang, gaId,
+      categories, counts, total: tools.length, theme, lang, gaId, basePath,
       error: msg, values,
     });
   };

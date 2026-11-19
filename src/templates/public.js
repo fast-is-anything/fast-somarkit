@@ -5,7 +5,7 @@
 import { esc, html } from '../lib/crypto.js';
 import { ICONS, UI, icon } from '../lib/icons.js';
 import { logoGlyph } from '../lib/logo.js';
-import { t, pricingLabel, LANGS, normalizeLang } from '../lib/i18n.js';
+import { t, pricingLabel, LANGS, normalizeLang, localePath, splitLocale, DEFAULT_LANG } from '../lib/i18n.js';
 import { renderMarkdown } from '../lib/markdown.js';
 
 function brandMark() {
@@ -45,13 +45,18 @@ function pageLoader() {
   </div>`;
 }
 
-/** Language dropdown used in both the desktop topbar and the mobile header. */
-function langSwitcher(lang, { mobile = false } = {}) {
+/**
+ * Language dropdown used in both the desktop topbar and the mobile header.
+ * Each option is a real link to the same page in the other locale
+ * (`/zh/tools/x` ⇄ `/en/tools/x`), so switching is shareable and crawlable.
+ */
+function langSwitcher(lang, { mobile = false, basePath = '/' } = {}) {
   const current = LANGS.find((l) => l.code === normalizeLang(lang)) || LANGS[0];
   const opts = LANGS.map(
     (l) => `<a class="lang-option ${l.code === current.code ? 'active' : ''}"
-        href="?lang=${esc(l.code)}" data-lang="${esc(l.code)}"
-        role="option" aria-selected="${l.code === current.code ? 'true' : 'false'}">
+        href="${esc(localePath(l.code, basePath))}" data-lang="${esc(l.code)}"
+        role="option" aria-selected="${l.code === current.code ? 'true' : 'false'}"
+        ${l.code === current.code ? 'aria-current="true"' : ''}>
         <span class="lang-option-short">${esc(l.short)}</span>
         <span class="lang-option-label">${esc(l.label)}</span>
         ${l.code === current.code ? UI.check : ''}
@@ -72,6 +77,24 @@ function langSwitcher(lang, { mobile = false } = {}) {
   </div>`;
 }
 
+/**
+ * hreflang set for the current page.
+ *
+ * `canonical` points at one locale; the language-neutral path is recovered from
+ * it so every locale gets an absolute URL of its own. `x-default` is the
+ * Chinese page because Chinese is the site default.
+ */
+function hreflangLinks(canonical, lang) {
+  const path = canonical ? new URL(canonical).pathname : '/';
+  const neutral = splitLocale(path).rest;
+  const base = 'https://somarkit.com';
+  const links = LANGS.map(
+    (l) => `<link rel="alternate" hreflang="${l.code}" href="${base}${localePath(l.code, neutral)}">`
+  );
+  links.push(`<link rel="alternate" hreflang="x-default" href="${base}${localePath(DEFAULT_LANG, neutral)}">`);
+  return links.join('\n');
+}
+
 function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [], theme = 'light', lang = 'zh', gaId = '', noindex = false }) {
   const htmlLang = normalizeLang(lang) === 'en' ? 'en' : 'zh-CN';
   const ogLocale = normalizeLang(lang) === 'en' ? 'en_US' : 'zh_CN';
@@ -90,9 +113,7 @@ function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [
 <meta name="theme-color" content="#0B1120" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
-<link rel="alternate" hreflang="zh" href="https://somarkit.com${canonical ? new URL(canonical).pathname : '/'}">
-<link rel="alternate" hreflang="en" href="https://somarkit.com${canonical ? new URL(canonical).pathname : '/'}?lang=en">
-<link rel="alternate" hreflang="x-default" href="https://somarkit.com${canonical ? new URL(canonical).pathname : '/'}">
+${hreflangLinks(canonical, lang)}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
@@ -124,28 +145,30 @@ gtag('config', ${JSON.stringify(gaId)}, { send_page_view: true });
 </head>`;
 }
 
-function sidebar({ categories, counts, activeSlug = 'all', total, lang = 'zh' }) {
+function sidebar({ categories, counts, activeSlug = 'all', total, lang = 'zh', basePath = '/' }) {
+  // Real links (not JS-only buttons) so each category page is addressable,
+  // shareable and crawlable in whichever locale the URL names.
   const items = [
-    html`<button class="category-item ${activeSlug === 'all' ? 'active' : ''}" data-category="all" type="button" title="${esc(t(lang, 'nav.allTools'))}">
+    `<a class="category-item ${activeSlug === 'all' ? 'active' : ''}" href="${esc(localePath(lang, '/'))}" title="${esc(t(lang, 'nav.allTools'))}">
       <span class="cat-icon">${ICONS.globe}</span>
       <span class="cat-name">${esc(t(lang, 'nav.allTools'))}</span>
       <span class="cat-count-badge">${total}</span>
-    </button>`,
+    </a>`,
   ];
   for (const c of categories) {
     const label = categoryLabel(c, lang);
     items.push(
-      html`<button class="category-item ${activeSlug === c.slug ? 'active' : ''}" data-category="${esc(c.slug)}" type="button" title="${esc(label)}">
+      `<a class="category-item ${activeSlug === c.slug ? 'active' : ''}" href="${esc(localePath(lang, `/${c.slug}`))}" title="${esc(label)}">
         <span class="cat-icon">${icon(c.icon)}</span>
         <span class="cat-name">${esc(label)}</span>
         <span class="cat-count-badge">${counts[c.id] || 0}</span>
-      </button>`
+      </a>`
     );
   }
 
   return `<aside class="sidebar" id="sidebar" aria-label="${esc(t(lang, 'nav.categories'))}">
     <div class="sidebar-header">
-      <a href="/" class="nav-brand" id="sidebarBrand" aria-label="${esc(t(lang, 'sidebar.home'))}" title="SoMarkIt">
+      <a href="${esc(localePath(lang, '/'))}" class="nav-brand" id="sidebarBrand" aria-label="${esc(t(lang, 'sidebar.home'))}" title="SoMarkIt">
         ${brandMark()}<span class="brand-text">SoMarkIt</span>
       </a>
       <button class="sidebar-collapse-btn" id="sidebarCollapse" type="button"
@@ -166,13 +189,13 @@ function categoryLabel(c, lang) {
   return c.name;
 }
 
-function mobileHeader(lang = 'zh') {
+function mobileHeader(lang = 'zh', basePath = '/') {
   return `<nav class="mobile-header" aria-label="${esc(t(lang, 'nav.categories'))}">
-    <a href="/" class="nav-brand">
+    <a href="${esc(localePath(lang, '/'))}" class="nav-brand">
       ${brandMark()}<span class="brand-text">SoMarkIt</span>
     </a>
     <div class="mobile-header-actions">
-      ${langSwitcher(lang, { mobile: true })}
+      ${langSwitcher(lang, { mobile: true, basePath })}
       <button class="nav-btn" data-theme-toggle type="button" aria-label="${esc(t(lang, 'nav.theme'))}" title="${esc(t(lang, 'nav.theme'))}">
         <span class="icon-moon">${UI.moon}</span><span class="icon-sun" style="display:none">${UI.sun}</span>
       </button>
@@ -183,7 +206,7 @@ function mobileHeader(lang = 'zh') {
   </nav>`;
 }
 
-function topbar({ categories, activeSlug = 'all', lang = 'zh' }) {
+function topbar({ categories, activeSlug = 'all', lang = 'zh', basePath = '/' }) {
   return `<div class="topbar" id="navbar">
     <div class="topbar-inner">
       <div class="topbar-search" role="search">
@@ -194,11 +217,11 @@ function topbar({ categories, activeSlug = 'all', lang = 'zh' }) {
         </div>
       </div>
       <div class="topbar-actions">
-        <a href="/#all" class="nav-btn" title="${esc(t(lang, 'nav.allTools'))}">${UI.sparkle}<span>${esc(t(lang, 'nav.allTools'))}</span></a>
-        <a href="/submit" class="nav-btn nav-btn-primary" title="${esc(t(lang, 'nav.submit'))}">
+        <a href="${esc(localePath(lang, '/'))}#all" class="nav-btn" title="${esc(t(lang, 'nav.allTools'))}">${UI.sparkle}<span>${esc(t(lang, 'nav.allTools'))}</span></a>
+        <a href="${esc(localePath(lang, '/submit'))}" class="nav-btn nav-btn-primary" title="${esc(t(lang, 'nav.submit'))}">
           ${UI.plus}<span>${esc(t(lang, 'nav.submit'))}</span>
         </a>
-        ${langSwitcher(lang)}
+        ${langSwitcher(lang, { basePath })}
         <button class="nav-btn" data-theme-toggle type="button" aria-label="${esc(t(lang, 'nav.theme'))}" title="${esc(t(lang, 'nav.theme'))}">
           <span class="icon-moon">${UI.moon}</span><span class="icon-sun" style="display:none">${UI.sun}</span>
         </button>
@@ -363,7 +386,7 @@ function toolCard(item, lang = 'zh') {
     <div class="tool-card-footer">
       <span class="pricing-tag pricing-${esc(item.pricing)}">${esc(pricingLabel(lang, item.pricing))}</span>
       <div class="tool-card-actions">
-        <a href="/tools/${esc(item.slug)}" class="tool-detail-link" title="${esc(t(lang, 'card.review'))}">${esc(t(lang, 'card.review'))}</a>
+        <a href="${esc(localePath(lang, `/tools/${item.slug}`))}" class="tool-detail-link" title="${esc(t(lang, 'card.review'))}">${esc(t(lang, 'card.review'))}</a>
         <a href="${esc(item.url)}" target="_blank" rel="${outboundRel(item)}"
           class="tool-visit-btn" data-tool-id="${item.id}">${esc(t(lang, 'card.visit'))} <span class="arrow">→</span></a>
       </div>
@@ -426,12 +449,12 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = 'zh
   </div>`;
 }
 
-function footer(year, lang = 'zh') {
+function footer(year, lang = 'zh', basePath = '/') {
   return `<footer class="site-footer">
     <div class="site-footer-inner">
       <div>© ${year} SoMarkIt · ${esc(t(lang, 'footer.tagline'))}</div>
       <div class="footer-links">
-        <a class="footer-link" href="/about">${esc(t(lang, 'footer.about'))}</a>
+        <a class="footer-link" href="${esc(localePath(lang, '/about'))}">${esc(t(lang, 'footer.about'))}</a>
         <a class="footer-link" href="/admin">${esc(t(lang, 'footer.admin'))}</a>
         <a class="footer-link" href="mailto:support@somarkit.com">${esc(t(lang, 'footer.contact'))}</a>
         <a class="footer-link" href="/sitemap.xml">${esc(t(lang, 'footer.sitemap'))}</a>
@@ -440,21 +463,21 @@ function footer(year, lang = 'zh') {
   </footer>`;
 }
 
-function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = 'zh', gaId = '', mode = 'subset', initialVisibleCount = null }) {
+function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = 'zh', gaId = '', basePath = '/', mode = 'subset', initialVisibleCount = null }) {
   return `${head({ title, description, canonical, jsonLd, theme, lang, gaId })}
 <body>
 <noscript><div style="text-align:center;padding:1rem;background:#FEF2F2;color:#991B1B">本站需要启用 JavaScript 才能使用搜索与筛选功能。</div></noscript>
 <a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
 <div class="app-layout">
-  ${sidebar({ categories, counts, activeSlug, total, lang })}
+  ${sidebar({ categories, counts, activeSlug, total, lang, basePath })}
   <div class="main-wrapper">
-    ${mobileHeader(lang)}
-    ${topbar({ categories, activeSlug, lang })}
+    ${mobileHeader(lang, basePath)}
+    ${topbar({ categories, activeSlug, lang, basePath })}
     <main id="main-content">
       ${hero({ total, catCount: categories.length, featured, lang })}
       ${contentArea({ groups, categories, total, activeSlug, lang, mode, initialVisibleCount })}
     </main>
-    ${footer(new Date().getFullYear(), lang)}
+    ${footer(new Date().getFullYear(), lang, basePath)}
   </div>
 </div>
 <button class="back-to-top" id="backToTop" type="button" aria-label="回到顶部">
@@ -487,7 +510,7 @@ function groupByCategory(categories, tools) {
 
 // --- pages ------------------------------------------------------------------
 
-export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = 'zh', gaId = '' }) {
+export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = 'zh', gaId = '', basePath = '/' }) {
   const groups = groupByCategory(categories, tools);
   const siteDesc = t(lang, 'seo.siteDesc');
   const jsonLd = [
@@ -531,10 +554,10 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
     shell({
       title: t(lang, 'seo.homeTitle'),
       description: `${t(lang, 'content.toolsCount', total)}, ${catCount}. ${siteDesc}`,
-      canonical: 'https://somarkit.com/',
+      canonical: `https://somarkit.com${localePath(lang, '/')}` ,
       jsonLd,
       categories, counts, groups, total, featured,
-      activeSlug: 'all', theme, lang, gaId,
+      activeSlug: 'all', theme, lang, gaId, basePath,
       // The home page renders the whole catalogue, so the rail can filter
       // client-side. Category pages only hold a subset and must navigate.
       mode: 'all',
@@ -543,7 +566,7 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
   );
 }
 
-export function toolPage({ tool, categories, counts, related, total, theme, lang = 'zh', gaId = '' }) {
+export function toolPage({ tool, categories, counts, related, total, theme, lang = 'zh', gaId = '', basePath = '/' }) {
   const siteDesc = t(lang, 'seo.siteDesc');
   const catName = tool.category_name || t(lang, 'detail.uncategorized');
   const jsonLd = [
@@ -584,7 +607,7 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
   const body = `${head({
     title: `${tool.name} — ${pricingLabel(lang, tool.pricing)} | SoMarkIt`,
     description: tool.description || siteDesc,
-    canonical: `https://somarkit.com/tools/${tool.slug}`,
+    canonical: `https://somarkit.com${localePath(lang, `/tools/${tool.slug}`)}`,
     jsonLd,
     theme,
     lang,
@@ -595,14 +618,14 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
 <body>
 <a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
 <div class="app-layout">
-  ${sidebar({ categories, counts, activeSlug: tool.category_slug || 'all', total, lang })}
+  ${sidebar({ categories, counts, activeSlug: tool.category_slug || 'all', total, lang, basePath })}
   <div class="main-wrapper">
-    ${mobileHeader(lang)}
-    ${topbar({ categories, lang })}
+    ${mobileHeader(lang, basePath)}
+    ${topbar({ categories, lang, basePath })}
     <main id="main-content" class="detail-wrap">
       <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin:0 0 16px">
-        <a href="/" style="color:inherit">${esc(t(lang, 'detail.home'))}</a> /
-        <a href="/${esc(tool.category_slug || '')}" style="color:inherit">${esc(catName)}</a> /
+        <a href="${esc(localePath(lang, '/'))}" style="color:inherit">${esc(t(lang, 'detail.home'))}</a> /
+        <a href="${esc(localePath(lang, `/${tool.category_slug || ''}`))}" style="color:inherit">${esc(catName)}</a> /
         <span>${esc(tool.name)}</span>
       </p>
       <div class="detail-card">
@@ -656,7 +679,7 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
       ${related.length ? `<h2 style="font-size:var(--text-lg);margin:36px 0 14px">${esc(t(lang, 'detail.related'))}</h2>
         <div class="tools-grid">${relatedCards}</div>` : ''}
     </main>
-    ${footer(new Date().getFullYear(), lang)}
+    ${footer(new Date().getFullYear(), lang, basePath)}
   </div>
 </div>
 ${pageLoader()}
@@ -666,7 +689,7 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = 'zh', gaId = '' }) {
+export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = 'zh', gaId = '', basePath = '/' }) {
   // Ship every category (not just this one) so switching to another category
   // can be handled client-side, exactly like on the home page.
   const groups = groupByCategory(categories, allTools || tools);
@@ -685,10 +708,10 @@ export function categoryPage({ category, categories, counts, tools, allTools, fe
     shell({
       title: `${catName} — SoMarkIt`,
       description: category.description || `${catName} · ${t(lang, 'content.toolsCount', tools.length)}`,
-      canonical: `https://somarkit.com/${category.slug}`,
+      canonical: `https://somarkit.com${localePath(lang, `/${category.slug}`)}`,
       jsonLd,
       categories, counts, groups, total, featured,
-      activeSlug: category.slug, theme, lang, gaId,
+      activeSlug: category.slug, theme, lang, gaId, basePath,
       // Full catalogue present → client-side switching, same as home.
       mode: 'all',
       initialVisibleCount: tools.length,
@@ -697,12 +720,12 @@ export function categoryPage({ category, categories, counts, tools, allTools, fe
   );
 }
 
-export function aboutPage({ categories, counts, total, theme, lang = 'zh', gaId = '' }) {
+export function aboutPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/' }) {
   const isEn = normalizeLang(lang) === 'en';
   const body = `${head({
     title: isEn ? 'About SoMarkIt — AI Tool Directory' : '关于 SoMarkIt — AI 工具导航',
     description: t(lang, 'seo.siteDesc'),
-    canonical: 'https://somarkit.com/about',
+    canonical: `https://somarkit.com${localePath(lang, '/about')}` ,
     jsonLd: [],
     theme,
     lang,
@@ -710,10 +733,10 @@ export function aboutPage({ categories, counts, total, theme, lang = 'zh', gaId 
   })}
 <body>
 <div class="app-layout">
-  ${sidebar({ categories, counts, activeSlug: 'about', total, lang })}
+  ${sidebar({ categories, counts, activeSlug: 'about', total, lang, basePath })}
   <div class="main-wrapper">
-    ${mobileHeader(lang)}
-    ${topbar({ categories, lang })}
+    ${mobileHeader(lang, basePath)}
+    ${topbar({ categories, lang, basePath })}
     <main id="main-content" class="detail-wrap">
       <div class="detail-card">
         <h1 class="detail-title">${isEn ? 'About SoMarkIt' : '关于 SoMarkIt'}</h1>
@@ -742,7 +765,7 @@ export function aboutPage({ categories, counts, total, theme, lang = 'zh', gaId 
         </div>
       </div>
     </main>
-    ${footer(new Date().getFullYear(), lang)}
+    ${footer(new Date().getFullYear(), lang, basePath)}
   </div>
 </div>
 ${pageLoader()}
@@ -751,21 +774,21 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function notFoundPage({ categories, counts, total, theme, lang = 'zh', gaId = '' }) {
+export function notFoundPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/' }) {
   const isEn = normalizeLang(lang) === 'en';
   return new Response(
     `${head({ title: isEn ? 'Page not found | SoMarkIt' : '页面不存在 | SoMarkIt', description: t(lang, 'seo.siteDesc'), theme, lang, gaId })}
 <body>
 <div class="app-layout">
-  ${sidebar({ categories, counts, activeSlug: 'all', total, lang })}
-  <div class="main-wrapper">${mobileHeader(lang)}${topbar({ categories, lang })}
+  ${sidebar({ categories, counts, activeSlug: 'all', total, lang, basePath })}
+  <div class="main-wrapper">${mobileHeader(lang, basePath)}${topbar({ categories, lang, basePath })}
     <main id="main-content" class="detail-wrap" style="text-align:center;padding-top:120px">
       <div style="font-size:72px;font-weight:800;letter-spacing:-.04em;color:var(--text-tertiary)">404</div>
       <h1 class="detail-title" style="margin-top:8px">${isEn ? 'This tool has not been marked yet' : '这个工具还没有被标记'}</h1>
       <p style="color:var(--text-tertiary);margin-bottom:24px">${isEn ? 'The page does not exist, or the tool has been removed.' : '页面不存在，或者工具已被移除。'}</p>
-      <a href="/" class="nav-btn nav-btn-primary" style="height:40px;padding:0 18px">${isEn ? 'Back to home' : '返回首页'}</a>
+      <a href="${esc(localePath(lang, '/'))}" class="nav-btn nav-btn-primary" style="height:40px;padding:0 18px">${isEn ? 'Back to home' : '返回首页'}</a>
     </main>
-    ${footer(new Date().getFullYear(), lang)}
+    ${footer(new Date().getFullYear(), lang, basePath)}
   </div>
 </div>
 ${pageLoader()}
@@ -777,7 +800,7 @@ ${pageLoader()}
 
 // --- submit a tool ----------------------------------------------------------
 
-export function submitPage({ categories, counts, total, theme, lang = 'zh', gaId = '', error = '', values = {} }) {
+export function submitPage({ categories, counts, total, theme, lang = 'zh', gaId = '', error = '', values = {}, basePath = '/' }) {
   const isEn = normalizeLang(lang) === 'en';
   const v = values || {};
 
@@ -794,7 +817,7 @@ export function submitPage({ categories, counts, total, theme, lang = 'zh', gaId
   const body = `${head({
     title: `${t(lang, 'submit.title')} — SoMarkIt`,
     description: t(lang, 'submit.lead'),
-    canonical: 'https://somarkit.com/submit',
+    canonical: `https://somarkit.com${localePath(lang, '/submit')}` ,
     jsonLd: [],
     theme,
     lang,
@@ -803,10 +826,10 @@ export function submitPage({ categories, counts, total, theme, lang = 'zh', gaId
 <body>
 <a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
 <div class="app-layout">
-  ${sidebar({ categories, counts, activeSlug: 'submit', total, lang })}
+  ${sidebar({ categories, counts, activeSlug: 'submit', total, lang, basePath })}
   <div class="main-wrapper">
-    ${mobileHeader(lang)}
-    ${topbar({ categories, lang })}
+    ${mobileHeader(lang, basePath)}
+    ${topbar({ categories, lang, basePath })}
     <main id="main-content" class="detail-wrap">
       <div class="detail-card submit-card">
         <h1 class="detail-title">${esc(t(lang, 'submit.title'))}</h1>
@@ -878,13 +901,13 @@ export function submitPage({ categories, counts, total, theme, lang = 'zh', gaId
 
           <div class="submit-actions">
             <button class="nav-btn nav-btn-primary" type="submit" style="height:40px;padding:0 22px">${esc(t(lang, 'submit.submitBtn'))}</button>
-            <a class="nav-btn" href="/" style="height:40px;padding:0 16px">${esc(t(lang, 'submit.back'))}</a>
+            <a class="nav-btn" href="${esc(localePath(lang, '/'))}" style="height:40px;padding:0 16px">${esc(t(lang, 'submit.back'))}</a>
           </div>
           <p class="submit-privacy">${esc(t(lang, 'submit.privacy'))}</p>
         </form>
       </div>
     </main>
-    ${footer(new Date().getFullYear(), lang)}
+    ${footer(new Date().getFullYear(), lang, basePath)}
   </div>
 </div>
 ${pageLoader()}
@@ -894,11 +917,11 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function submitSuccessPage({ categories, counts, total, theme, lang = 'zh', gaId = '' }) {
+export function submitSuccessPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/' }) {
   const body = `${head({
     title: `${t(lang, 'submit.successTitle')} — SoMarkIt`,
     description: t(lang, 'submit.successBody'),
-    canonical: 'https://somarkit.com/submit',
+    canonical: `https://somarkit.com${localePath(lang, '/submit')}` ,
     jsonLd: [],
     theme,
     lang,
@@ -906,20 +929,20 @@ export function submitSuccessPage({ categories, counts, total, theme, lang = 'zh
   })}
 <body>
 <div class="app-layout">
-  ${sidebar({ categories, counts, activeSlug: 'submit', total, lang })}
+  ${sidebar({ categories, counts, activeSlug: 'submit', total, lang, basePath })}
   <div class="main-wrapper">
-    ${mobileHeader(lang)}
-    ${topbar({ categories, lang })}
+    ${mobileHeader(lang, basePath)}
+    ${topbar({ categories, lang, basePath })}
     <main id="main-content" class="detail-wrap" style="text-align:center;padding-top:80px">
       <div class="submit-success-icon">${UI.check}</div>
       <h1 class="detail-title">${esc(t(lang, 'submit.successTitle'))}</h1>
       <p style="color:var(--text-tertiary);margin:8px 0 28px">${esc(t(lang, 'submit.successBody'))}</p>
       <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <a href="/submit" class="nav-btn" style="height:40px;padding:0 18px">${esc(t(lang, 'submit.again'))}</a>
-        <a href="/" class="nav-btn nav-btn-primary" style="height:40px;padding:0 18px">${esc(t(lang, 'submit.back'))}</a>
+        <a href="${esc(localePath(lang, '/submit'))}" class="nav-btn" style="height:40px;padding:0 18px">${esc(t(lang, 'submit.again'))}</a>
+        <a href="${esc(localePath(lang, '/'))}" class="nav-btn nav-btn-primary" style="height:40px;padding:0 18px">${esc(t(lang, 'submit.back'))}</a>
       </div>
     </main>
-    ${footer(new Date().getFullYear(), lang)}
+    ${footer(new Date().getFullYear(), lang, basePath)}
   </div>
 </div>
 ${pageLoader()}

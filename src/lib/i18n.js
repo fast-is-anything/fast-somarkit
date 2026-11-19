@@ -10,10 +10,55 @@ export const LANGS = [
 ];
 
 export const DEFAULT_LANG = 'zh';
-export const LANG_COOKIE = 'somarkit_lang';
 
 export function normalizeLang(v) {
   return LANGS.some((l) => l.code === v) ? v : DEFAULT_LANG;
+}
+
+// -----------------------------------------------------------------------------
+// Locale-prefixed routing.
+//
+// Every public page lives under a language prefix: `/zh/...` or `/en/...`.
+// The language is decided by the URL alone — no cookie, no Accept-Language
+// sniffing — so a shared link always renders in one language and crawlers get
+// exactly what users get.
+// -----------------------------------------------------------------------------
+
+const LOCALE_PREFIX = /^\/(zh|en)(?=\/|$)/;
+
+/**
+ * Split a pathname into its language and the language-neutral remainder.
+ *
+ *   '/zh'            → { lang: 'zh', rest: '/',  matched: true  }
+ *   '/en/tools/x'    → { lang: 'en', rest: '/tools/x', matched: true }
+ *   '/tools/x'       → { lang: null, rest: '/tools/x', matched: false }
+ *
+ * Callers treat `matched: false` on public routes as a 404: unprefixed URLs are
+ * intentionally unsupported so there is exactly one canonical address per page.
+ */
+export function splitLocale(pathname) {
+  const path = pathname || '/';
+  const m = path.match(LOCALE_PREFIX);
+  if (!m) return { lang: null, rest: path, matched: false };
+  const rest = path.slice(m[0].length);
+  return { lang: m[1], rest: rest === '' ? '/' : rest, matched: true };
+}
+
+/** Prefix a language-neutral path for one locale. Always returns `/xx/...`. */
+export function localePath(lang, path = '/') {
+  const code = normalizeLang(lang);
+  const p = String(path || '/');
+  if (p === '/' || p === '') return `/${code}`;
+  return `/${code}${p.startsWith('/') ? p : `/${p}`}`;
+}
+
+/**
+ * Translate a path from one locale to another, keeping the rest of the URL.
+ * Used by the language switcher so clicking "English" lands on the same page.
+ */
+export function switchLocalePath(currentLang, targetLang, pathname, search = '') {
+  const { rest } = splitLocale(pathname);
+  return localePath(targetLang, rest) + (search || '');
 }
 
 const DICT = {
