@@ -1,0 +1,19 @@
+{
+  "name": "somarkit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SoMarkIt — curated AI tools directory built on Cloudflare Workers",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 execute somarkit --local --file=./db/schema.sql",
+    "db:migrate": "wrangler d1 execute somarkit --remote --file=./db/schema.sql",
+    "db:seed:local": "wrangler d1 execute somarkit --local --file=./db/seed.sql",
+    "db:seed": "wrangler d1 execute somarkit --remote --file=./db/seed.sql",
+    "build:css": "node scripts/build-css.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.71.0"
+  }
+}

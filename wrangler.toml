@@ -1,0 +1,41 @@
+name = "somarkit"
+main = "src/index.js"
+compatibility_date = "2025-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------------------------------------------------------------------------
+# Custom domain (requires a zone already active in this Cloudflare account)
+# ---------------------------------------------------------------------------
+routes = [
+  { pattern = "somarkit.com", custom_domain = true },
+  { pattern = "www.somarkit.com", custom_domain = true },
+]
+
+[observability]
+enabled = true
+
+# ---------------------------------------------------------------------------
+# D1 — tools / categories / admins / audit log
+# ---------------------------------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "somarkit"
+database_id = "7224c811-6811-4ce3-b680-dab6479a98f1"
+migrations_dir = "db/migrations"
+
+# ---------------------------------------------------------------------------
+# Static assets (favicon, og image, vendor JS)
+# ---------------------------------------------------------------------------
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[vars]
+SITE_NAME = "SoMarkIt"
+SITE_URL = "https://somarkit.com"
+# Comma separated list of Google accounts allowed into /admin
+ADMIN_EMAILS = "eastlion123456@gmail.com,dongdochong@gmail.com"
+# Google OAuth client id / secret are provided as secrets:
+#   wrangler secret put GOOGLE_CLIENT_ID
+#   wrangler secret put GOOGLE_CLIENT_SECRET
+#   wrangler secret put SESSION_SECRET

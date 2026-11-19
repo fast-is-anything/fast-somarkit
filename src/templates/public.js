@@ -1,0 +1,811 @@
+// -----------------------------------------------------------------------------
+// Public site templates
+// -----------------------------------------------------------------------------
+
+import { esc, html } from '../lib/crypto.js';
+import { ICONS, UI, icon } from '../lib/icons.js';
+import { logoGlyph } from '../lib/logo.js';
+import { t, pricingLabel, LANGS, normalizeLang } from '../lib/i18n.js';
+
+function brandMark() {
+  return `<span class="brand-mark" aria-hidden="true">${logoGlyph(22)}</span>`;
+}
+
+/**
+ * Full-screen loader markup, toggled by `body.is-loading`.
+ * Kept in the initial HTML (not injected) so it paints on the very first frame
+ * of a document navigation instead of after the JS bundle runs.
+ */
+function pageLoader() {
+  return `<div class="page-loader" id="pageLoader" aria-hidden="true">
+    <div class="longfazers">
+      <span></span><span></span><span></span><span></span>
+    </div>
+    <div class="loader">
+      <span><span></span><span></span><span></span><span></span></span>
+      <div class="base">
+        <span></span>
+        <div class="face"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/** Language dropdown used in both the desktop topbar and the mobile header. */
+function langSwitcher(lang, { mobile = false } = {}) {
+  const current = LANGS.find((l) => l.code === normalizeLang(lang)) || LANGS[0];
+  const opts = LANGS.map(
+    (l) => `<a class="lang-option ${l.code === current.code ? 'active' : ''}"
+        href="?lang=${esc(l.code)}" data-lang="${esc(l.code)}"
+        role="option" aria-selected="${l.code === current.code ? 'true' : 'false'}">
+        <span class="lang-option-short">${esc(l.short)}</span>
+        <span class="lang-option-label">${esc(l.label)}</span>
+        ${l.code === current.code ? UI.check : ''}
+      </a>`
+  ).join('');
+
+  return `<div class="lang-switcher ${mobile ? 'lang-switcher-mobile' : ''}" data-lang-switcher>
+    <button class="nav-btn lang-toggle" type="button" aria-haspopup="listbox"
+      aria-expanded="false" aria-label="${esc(t(lang, 'nav.language'))}"
+      title="${esc(t(lang, 'nav.language'))}">
+      ${UI.globe}
+      <span class="lang-current">${esc(current.short)}</span>
+      ${UI.chevronDown}
+    </button>
+    <div class="lang-dropdown" role="listbox" aria-label="${esc(t(lang, 'nav.language'))}">
+      ${opts}
+    </div>
+  </div>`;
+}
+
+function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [], theme = 'light', lang = 'zh' }) {
+  const htmlLang = normalizeLang(lang) === 'en' ? 'en' : 'zh-CN';
+  const ogLocale = normalizeLang(lang) === 'en' ? 'en_US' : 'zh_CN';
+  return `<!DOCTYPE html>
+<html lang="${htmlLang}" data-lang="${esc(normalizeLang(lang))}" data-theme="${theme}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(description)}">
+<meta name="keywords" content="SoMarkIt,AI工具,AI导航,AI工具导航,ChatGPT,Claude,DeepSeek,AI绘画,AI视频,AI编程,AI写作,人工智能工具">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B1120" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
+<link rel="alternate" hreflang="zh" href="https://somarkit.com${canonical ? new URL(canonical).pathname : '/'}">
+<link rel="alternate" hreflang="en" href="https://somarkit.com${canonical ? new URL(canonical).pathname : '/'}?lang=en">
+<link rel="alternate" hreflang="x-default" href="https://somarkit.com${canonical ? new URL(canonical).pathname : '/'}">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${esc(siteName)}">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(description)}">
+<meta property="og:image" content="https://somarkit.com/og-cover.svg">
+<meta property="og:locale" content="${ogLocale}">
+${canonical ? `<meta property="og:url" content="${esc(canonical)}">` : ''}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:description" content="${esc(description)}">
+<meta name="twitter:image" content="https://somarkit.com/og-cover.svg">
+<link rel="stylesheet" href="/assets/site.css">
+<script>
+(function(){try{var t=localStorage.getItem('somarkit-theme');
+if(t!=='dark'&&t!=='light'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+${jsonLd.map((j) => `<script type="application/ld+json">${JSON.stringify(j)}</script>`).join('\n')}
+</head>`;
+}
+
+function sidebar({ categories, counts, activeSlug = 'all', total, lang = 'zh' }) {
+  const items = [
+    html`<button class="category-item ${activeSlug === 'all' ? 'active' : ''}" data-category="all" type="button" title="${esc(t(lang, 'nav.allTools'))}">
+      <span class="cat-icon">${ICONS.globe}</span>
+      <span class="cat-name">${esc(t(lang, 'nav.allTools'))}</span>
+      <span class="cat-count-badge">${total}</span>
+    </button>`,
+  ];
+  for (const c of categories) {
+    const label = categoryLabel(c, lang);
+    items.push(
+      html`<button class="category-item ${activeSlug === c.slug ? 'active' : ''}" data-category="${esc(c.slug)}" type="button" title="${esc(label)}">
+        <span class="cat-icon">${icon(c.icon)}</span>
+        <span class="cat-name">${esc(label)}</span>
+        <span class="cat-count-badge">${counts[c.id] || 0}</span>
+      </button>`
+    );
+  }
+
+  return `<aside class="sidebar" id="sidebar" aria-label="${esc(t(lang, 'nav.categories'))}">
+    <div class="sidebar-header">
+      <a href="/" class="nav-brand" id="sidebarBrand" aria-label="${esc(t(lang, 'sidebar.home'))}" title="SoMarkIt">
+        ${brandMark()}<span class="brand-text">SoMarkIt</span>
+      </a>
+      <button class="sidebar-collapse-btn" id="sidebarCollapse" type="button"
+        aria-label="${esc(t(lang, 'sidebar.collapse'))}" aria-expanded="true" title="${esc(t(lang, 'sidebar.collapse'))}">
+        ${UI.panelLeft}
+      </button>
+    </div>
+    <nav class="sidebar-nav">
+      ${items.join('\n')}
+    </nav>
+  </aside>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>`;
+}
+
+/** Category display name, honouring the stored English name when present. */
+function categoryLabel(c, lang) {
+  if (normalizeLang(lang) === 'en' && c.name_en) return c.name_en;
+  return c.name;
+}
+
+function mobileHeader(lang = 'zh') {
+  return `<nav class="mobile-header" aria-label="${esc(t(lang, 'nav.categories'))}">
+    <a href="/" class="nav-brand">
+      ${brandMark()}<span class="brand-text">SoMarkIt</span>
+    </a>
+    <div class="mobile-header-actions">
+      ${langSwitcher(lang, { mobile: true })}
+      <button class="nav-btn" data-theme-toggle type="button" aria-label="${esc(t(lang, 'nav.theme'))}" title="${esc(t(lang, 'nav.theme'))}">
+        <span class="icon-moon">${UI.moon}</span><span class="icon-sun" style="display:none">${UI.sun}</span>
+      </button>
+      <button class="nav-btn" id="sidebarToggle" type="button" aria-label="${esc(t(lang, 'sidebar.open'))}" aria-expanded="false">
+        ${UI.menu}
+      </button>
+    </div>
+  </nav>`;
+}
+
+function topbar({ categories, activeSlug = 'all', lang = 'zh' }) {
+  return `<div class="topbar" id="navbar">
+    <div class="topbar-inner">
+      <div class="topbar-search" role="search">
+        <div class="nav-search-wrapper">
+          <span class="search-icon">${UI.search}</span>
+          <input type="search" class="nav-search-input js-search" id="navSearchInput"
+            placeholder="${esc(t(lang, 'nav.search'))}" autocomplete="off" aria-label="${esc(t(lang, 'nav.searchAria'))}">
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <a href="/#all" class="nav-btn" title="${esc(t(lang, 'nav.allTools'))}">${UI.sparkle}<span>${esc(t(lang, 'nav.allTools'))}</span></a>
+        <a href="/submit" class="nav-btn nav-btn-primary" title="${esc(t(lang, 'nav.submit'))}">
+          ${UI.plus}<span>${esc(t(lang, 'nav.submit'))}</span>
+        </a>
+        ${langSwitcher(lang)}
+        <button class="nav-btn" data-theme-toggle type="button" aria-label="${esc(t(lang, 'nav.theme'))}" title="${esc(t(lang, 'nav.theme'))}">
+          <span class="icon-moon">${UI.moon}</span><span class="icon-sun" style="display:none">${UI.sun}</span>
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function hero({ total, catCount, featured, lang = 'zh' }) {
+  let rail = '';
+  if (featured.length) {
+    // Two rich colour cards on top, matching the reference density.
+    const rows = featured.slice(0, 2).map((item, i) => {
+      const kicker = item.tags[0] || item.category_name || '';
+      const tags = item.tags.slice(0, 3)
+        .map((tag) => `<span class="hero-agent-tag">${esc(tag)}</span>`)
+        .join('');
+      return `<a class="hero-agent-card hero-agent-accent-${i % 4}"
+          href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"
+          data-tool-id="${item.id}">
+        ${logoBox(item, 'hero-agent-logo')}
+        <div class="hero-agent-head">
+          <span class="hero-agent-name">${esc(item.name)}</span>
+          ${kicker ? `<span class="hero-agent-kicker">${esc(kicker)}</span>` : ''}
+        </div>
+        <span class="hero-agent-badge">${esc(pricingLabel(lang, item.pricing))}</span>
+        <span class="hero-agent-desc">${esc(item.description || '')}</span>
+        ${tags ? `<span class="hero-agent-tags">${tags}</span>` : ''}
+      </a>`;
+    });
+    rail = `<div class="hero-featured" aria-labelledby="featured-heading">
+      <h2 class="hero-featured-title" id="featured-heading"><span class="i-flame">${UI.flame}</span>${esc(t(lang, 'hero.featured'))}</h2>
+      <div class="hero-featured-list">${rows.join('\n')}</div>
+    </div>`;
+  }
+
+  return `<header class="hero">
+    <div class="hero-inner">
+      <div class="hero-combined">
+        <div class="hero-content">
+          <h1 class="hero-title"><span class="hero-title-line">${esc(t(lang, 'hero.title.1'))}</span><span class="hero-title-line">${esc(t(lang, 'hero.title.2'))}</span></h1>
+          <p class="hero-subtitle">${esc(t(lang, 'hero.subtitle', total, catCount))}</p>
+          <div class="hero-search" role="search" aria-label="${esc(t(lang, 'hero.searchAria'))}">
+            <div class="hero-search-wrapper">
+              <span class="search-icon">${UI.search}</span>
+              <input type="search" class="hero-search-input js-search" id="heroSearchInput"
+                placeholder="${esc(t(lang, 'hero.searchPlaceholder'))}" data-ph-short="${esc(t(lang, 'hero.searchPlaceholderShort'))}" autocomplete="off" aria-label="${esc(t(lang, 'nav.searchAria'))}">
+              <button class="search-btn" type="button" aria-label="${esc(t(lang, 'hero.searchBtn'))}">${UI.arrowIn}</button>
+            </div>
+          </div>
+          <div class="hero-stats" aria-label="${esc(t(lang, 'hero.statTools'))}">
+            <div class="hero-stat"><div class="hero-stat-value" id="statToolCount">${total}</div><div class="hero-stat-label">${esc(t(lang, 'hero.statTools'))}</div></div>
+            <div class="hero-stat"><div class="hero-stat-value" id="statCatCount">${catCount}</div><div class="hero-stat-label">${esc(t(lang, 'hero.statCategories'))}</div></div>
+            <div class="hero-stat"><div class="hero-stat-value">${esc(t(lang, 'hero.statUpdateValue'))}</div><div class="hero-stat-label">${esc(t(lang, 'hero.statUpdate'))}</div></div>
+          </div>
+        </div>
+        ${rail}
+      </div>
+    </div>
+  </header>`;
+}
+
+function truncate(s, n) {
+  s = String(s || '');
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+}
+
+function initials(name) {
+  const s = String(name || '?').trim();
+  const cn = s.match(/[\u4e00-\u9fa5]/);
+  if (cn) return s.slice(0, 1);
+  const parts = s.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return s.slice(0, 2).toUpperCase();
+}
+
+function hostOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
+}
+
+function logoBox(tool, cls) {
+  if (tool.logo_url) {
+    return `<span class="${cls}"><img src="${esc(tool.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+  }
+  return `<span class="${cls}" aria-hidden="true">${esc(initials(tool.name))}</span>`;
+}
+
+function toolCard(item, lang = 'zh') {
+  const tags = item.tags.slice(0, 4).map((tag) => `<span class="tool-tag">${esc(tag)}</span>`).join('');
+  const haystack = [item.name, item.description, item.tags.join(' '), item.category_name, hostOf(item.url)]
+    .filter(Boolean).join(' ').toLowerCase();
+
+  return `<div class="tool-card" role="listitem"
+    data-category="${esc(item.category_slug || '')}"
+    data-pricing="${esc(item.pricing)}"
+    data-search="${esc(haystack)}">
+    <div class="tool-card-header">
+      <div class="tool-info">
+        <h3 class="tool-name">
+          <span>${esc(item.name)}</span>
+          ${item.is_hot ? `<span class="badge badge-hot">${esc(t(lang, 'badge.hot'))}</span>` : ''}
+          ${item.is_new ? `<span class="badge badge-new">${esc(t(lang, 'badge.new'))}</span>` : ''}
+        </h3>
+      </div>
+    </div>
+    <p class="tool-desc">${esc(item.description || t(lang, 'card.noDesc'))}</p>
+    ${tags ? `<div class="tool-tags">${tags}</div>` : ''}
+    <div class="tool-card-footer">
+      <span class="pricing-tag pricing-${esc(item.pricing)}">${esc(pricingLabel(lang, item.pricing))}</span>
+      <div class="tool-card-actions">
+        <a href="/tools/${esc(item.slug)}" class="tool-detail-link" title="${esc(t(lang, 'card.review'))}">${esc(t(lang, 'card.review'))}</a>
+        <a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer nofollow"
+          class="tool-visit-btn" data-tool-id="${item.id}">${esc(t(lang, 'card.visit'))} <span class="arrow">→</span></a>
+      </div>
+    </div>
+  </div>`;
+}
+
+/**
+ * Render the tool listing.
+ *
+ * Every listing page ships the FULL catalogue (one section per category) and
+ * only marks non-active categories as initially hidden. That way any category
+ * click can be handled client-side, on every page — no round-trip, no flash of
+ * a loading screen after the first visit to a category page.
+ */
+function contentArea({ groups, categories, total, activeSlug = 'all', lang = 'zh', mode = 'subset', initialVisibleCount = null }) {
+  // On a category page only the matching section starts visible; the rest are
+  // hidden up front so the server-rendered HTML already looks correct (no
+  // flash of other categories before JS runs). Keyed off initialVisibleCount
+  // rather than `mode`, because category pages also ship the full catalogue
+  // (mode 'all') and only differ in what is initially shown.
+  const restrictToActive = initialVisibleCount != null;
+  const sections = groups
+    .map((g) => {
+      const cards = g.tools.map((tool) => toolCard(tool, lang)).join('\n');
+      const isActiveSection = !restrictToActive || g.category.slug === activeSlug;
+      const hiddenAttr = isActiveSection ? '' : ' style="display:none"';
+      return `<section class="category-section" id="cat-${esc(g.category.slug)}" data-category="${esc(g.category.slug)}" data-total="${g.tools.length}"${hiddenAttr}>
+        <div class="category-section-header">
+          <span class="cat-icon">${icon(g.category.icon)}</span>
+          <span class="cat-name">${esc(categoryLabel(g.category, lang))}</span>
+          <span class="cat-count">${esc(t(lang, 'content.total', g.tools.length))}</span>
+        </div>
+        <div class="tools-grid">${cards}</div>
+      </section>`;
+    })
+    .join('\n');
+
+  const chips = ['all', 'free', 'freemium', 'paid', 'opensource']
+    .map((k) => `<button class="chip ${k === 'all' ? 'active' : ''}" type="button" data-pricing-filter="${k}">${esc(pricingLabel(lang, k))}</button>`)
+    .join('');
+
+  const shown = initialVisibleCount == null ? total : initialVisibleCount;
+
+  return `<div class="content-area">
+    <div class="content-head" id="contentHead">
+      <h2>${esc(t(lang, 'content.title'))}</h2>
+      <span class="tools-count" id="toolsCount" aria-live="polite">${esc(t(lang, 'content.toolsCount', shown))}</span>
+      <span class="content-head-spacer"></span>
+      <div class="filter-bar" role="group" aria-label="${esc(t(lang, 'content.filterAria'))}" data-lang="${esc(normalizeLang(lang))}">${chips}</div>
+    </div>
+    <div id="toolsContainer" role="list" aria-label="${esc(t(lang, 'content.title'))}" data-mode="${esc(mode)}" data-active="${esc(activeSlug)}">
+      ${sections}
+    </div>
+    <div class="empty-state" id="emptyState" style="display:none">
+      ${UI.search}
+      <h3>${esc(t(lang, 'empty.title'))}</h3>
+      <p>${esc(t(lang, 'empty.hint'))}<a href="#" data-clear-filters style="color:var(--accent)">${esc(t(lang, 'empty.clear'))}</a></p>
+    </div>
+  </div>`;
+}
+
+function footer(year, lang = 'zh') {
+  return `<footer class="site-footer">
+    <div class="site-footer-inner">
+      <div>© ${year} SoMarkIt · ${esc(t(lang, 'footer.tagline'))}</div>
+      <div class="footer-links">
+        <a class="footer-link" href="/about">${esc(t(lang, 'footer.about'))}</a>
+        <a class="footer-link" href="/admin">${esc(t(lang, 'footer.admin'))}</a>
+        <a class="footer-link" href="mailto:support@somarkit.com">${esc(t(lang, 'footer.contact'))}</a>
+        <a class="footer-link" href="/sitemap.xml">${esc(t(lang, 'footer.sitemap'))}</a>
+      </div>
+    </div>
+  </footer>`;
+}
+
+function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = 'zh', mode = 'subset', initialVisibleCount = null }) {
+  return `${head({ title, description, canonical, jsonLd, theme, lang })}
+<body>
+<noscript><div style="text-align:center;padding:1rem;background:#FEF2F2;color:#991B1B">本站需要启用 JavaScript 才能使用搜索与筛选功能。</div></noscript>
+<a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
+<div class="app-layout">
+  ${sidebar({ categories, counts, activeSlug, total, lang })}
+  <div class="main-wrapper">
+    ${mobileHeader(lang)}
+    ${topbar({ categories, activeSlug, lang })}
+    <main id="main-content">
+      ${hero({ total, catCount: categories.length, featured, lang })}
+      ${contentArea({ groups, categories, total, activeSlug, lang, mode, initialVisibleCount })}
+    </main>
+    ${footer(new Date().getFullYear(), lang)}
+  </div>
+</div>
+<button class="back-to-top" id="backToTop" type="button" aria-label="回到顶部">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+</button>
+${pageLoader()}
+<script src="/assets/site.js" defer></script>
+</body>
+</html>`;
+}
+
+/** Group published tools by category, in category order. */
+function groupByCategory(categories, tools) {
+  const byId = new Map();
+  for (const c of categories) byId.set(c.id, { category: c, tools: [] });
+  const orphan = [];
+  for (const t of tools) {
+    const g = byId.get(t.category_id);
+    if (g) g.tools.push(t); else orphan.push(t);
+  }
+  const groups = [...byId.values()].filter((g) => g.tools.length > 0);
+  if (orphan.length) {
+    groups.push({
+      category: { id: 0, slug: 'uncategorized', name: '未分类', icon: 'grid' },
+      tools: orphan,
+    });
+  }
+  return groups;
+}
+
+// --- pages ------------------------------------------------------------------
+
+export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = 'zh' }) {
+  const groups = groupByCategory(categories, tools);
+  const siteDesc = t(lang, 'seo.siteDesc');
+  const jsonLd = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: 'SoMarkIt',
+      alternateName: ['AI 工具导航', 'AI Tools Directory'],
+      url: 'https://somarkit.com/',
+      description: siteDesc,
+      inLanguage: normalizeLang(lang) === 'en' ? 'en' : 'zh-CN',
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: { '@type': 'EntryPoint', urlTemplate: 'https://somarkit.com/?q={search_term_string}' },
+        'query-input': 'required name=search_term_string',
+      },
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: 'SoMarkIt',
+      url: 'https://somarkit.com/',
+      logo: 'https://somarkit.com/apple-touch-icon.png',
+      description: siteDesc,
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: t(lang, 'content.title'),
+      numberOfItems: total,
+      itemListElement: tools.slice(0, 50).map((x, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: x.name,
+        url: `https://somarkit.com/tools/${x.slug}`,
+      })),
+    },
+  ];
+
+  return new Response(
+    shell({
+      title: t(lang, 'seo.homeTitle'),
+      description: `${t(lang, 'content.toolsCount', total)}, ${catCount}. ${siteDesc}`,
+      canonical: 'https://somarkit.com/',
+      jsonLd,
+      categories, counts, groups, total, featured,
+      activeSlug: 'all', theme, lang,
+      // The home page renders the whole catalogue, so the rail can filter
+      // client-side. Category pages only hold a subset and must navigate.
+      mode: 'all',
+    }),
+    { headers: { 'content-type': 'text/html; charset=utf-8' } }
+  );
+}
+
+export function toolPage({ tool, categories, counts, related, total, theme, lang = 'zh' }) {
+  const siteDesc = t(lang, 'seo.siteDesc');
+  const catName = tool.category_name || t(lang, 'detail.uncategorized');
+  const jsonLd = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: tool.name,
+      description: tool.description,
+      url: tool.url,
+      applicationCategory: 'AI Tool',
+      operatingSystem: 'Web',
+      offers: { '@type': 'Offer', price: tool.pricing === 'free' ? '0' : undefined, priceCurrency: 'USD' },
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: t(lang, 'detail.home'), item: 'https://somarkit.com/' },
+        { '@type': 'ListItem', position: 2, name: catName, item: `https://somarkit.com/${tool.category_slug || ''}` },
+        { '@type': 'ListItem', position: 3, name: tool.name, item: `https://somarkit.com/tools/${tool.slug}` },
+      ],
+    },
+  ];
+
+  const relatedCards = related.slice(0, 6).map((x) => toolCard(x, lang)).join('');
+  const tags = tool.tags.map((tag) => `<span class="tool-tag">${esc(tag)}</span>`).join('');
+
+  const body = `${head({
+    title: `${tool.name} — ${pricingLabel(lang, tool.pricing)} | SoMarkIt`,
+    description: tool.description || siteDesc,
+    canonical: `https://somarkit.com/tools/${tool.slug}`,
+    jsonLd,
+    theme,
+    lang,
+  })}
+<body>
+<a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
+<div class="app-layout">
+  ${sidebar({ categories, counts, activeSlug: tool.category_slug || 'all', total, lang })}
+  <div class="main-wrapper">
+    ${mobileHeader(lang)}
+    ${topbar({ categories, lang })}
+    <main id="main-content" class="detail-wrap">
+      <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin:0 0 16px">
+        <a href="/" style="color:inherit">${esc(t(lang, 'detail.home'))}</a> /
+        <a href="/${esc(tool.category_slug || '')}" style="color:inherit">${esc(catName)}</a> /
+        <span>${esc(tool.name)}</span>
+      </p>
+      <div class="detail-card">
+        <div class="detail-head">
+          ${logoBox(tool, 'detail-logo')}
+          <h1 class="detail-title">
+            ${esc(tool.name)}
+            ${tool.is_hot ? `<span class="badge badge-hot">${esc(t(lang, 'badge.hot'))}</span>` : ''}
+            ${tool.is_new ? `<span class="badge badge-new">${esc(t(lang, 'badge.new'))}</span>` : ''}
+          </h1>
+          <div class="detail-meta">
+            <span class="pricing-tag pricing-${esc(tool.pricing)}">${esc(pricingLabel(lang, tool.pricing))}</span>
+            <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(hostOf(tool.url))}</a>
+            <span class="detail-meta-item">${esc(catName)}</span>
+            <span class="detail-meta-item">${esc(t(lang, 'detail.visits', tool.visit_count))}</span>
+          </div>
+        </div>
+        <div class="detail-body">${esc(tool.description || t(lang, 'card.noDesc'))}</div>
+        ${tags ? `<div class="tool-tags" style="margin-bottom:24px">${tags}</div>` : ''}
+        <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow" class="nav-btn nav-btn-primary"
+          style="height:42px;padding:0 20px;font-size:var(--text-sm)" data-tool-id="${tool.id}">
+          ${esc(t(lang, 'detail.visitSite'))} ${UI.externalLink}
+        </a>
+      </div>
+      ${related.length ? `<h2 style="font-size:var(--text-lg);margin:36px 0 14px">${esc(t(lang, 'detail.related'))}</h2>
+        <div class="tools-grid">${relatedCards}</div>` : ''}
+    </main>
+    ${footer(new Date().getFullYear(), lang)}
+  </div>
+</div>
+${pageLoader()}
+<script src="/assets/site.js" defer></script>
+</body></html>`;
+
+  return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+}
+
+export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = 'zh' }) {
+  // Ship every category (not just this one) so switching to another category
+  // can be handled client-side, exactly like on the home page.
+  const groups = groupByCategory(categories, allTools || tools);
+  const catName = categoryLabel(category, lang);
+  const jsonLd = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: `${catName} — SoMarkIt`,
+      description: category.description || `${catName} — SoMarkIt`,
+      url: `https://somarkit.com/${category.slug}`,
+    },
+  ];
+
+  return new Response(
+    shell({
+      title: `${catName} — SoMarkIt`,
+      description: category.description || `${catName} · ${t(lang, 'content.toolsCount', tools.length)}`,
+      canonical: `https://somarkit.com/${category.slug}`,
+      jsonLd,
+      categories, counts, groups, total, featured,
+      activeSlug: category.slug, theme, lang,
+      // Full catalogue present → client-side switching, same as home.
+      mode: 'all',
+      initialVisibleCount: tools.length,
+    }),
+    { headers: { 'content-type': 'text/html; charset=utf-8' } }
+  );
+}
+
+export function aboutPage({ categories, counts, total, theme, lang = 'zh' }) {
+  const isEn = normalizeLang(lang) === 'en';
+  const body = `${head({
+    title: isEn ? 'About SoMarkIt — AI Tool Directory' : '关于 SoMarkIt — AI 工具导航',
+    description: t(lang, 'seo.siteDesc'),
+    canonical: 'https://somarkit.com/about',
+    jsonLd: [],
+    theme,
+    lang,
+  })}
+<body>
+<div class="app-layout">
+  ${sidebar({ categories, counts, activeSlug: 'about', total, lang })}
+  <div class="main-wrapper">
+    ${mobileHeader(lang)}
+    ${topbar({ categories, lang })}
+    <main id="main-content" class="detail-wrap">
+      <div class="detail-card">
+        <h1 class="detail-title">${isEn ? 'About SoMarkIt' : '关于 SoMarkIt'}</h1>
+        <div class="detail-body">
+          ${isEn
+            ? `<p>SoMarkIt is a hand-curated AI tool directory. We do not aim to list the most tools — every entry is checked in practice and comes with a clear positioning note.</p>
+               <p>The site runs on Cloudflare Workers + D1, and content is maintained through a built-in admin console with instant publishing.</p>
+               <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">What we list</h2>
+               <ul style="padding-left:20px">
+                 <li>Publicly accessible AI products and services with clear value</li>
+                 <li>Chat assistants, agents, coding, productivity, image, video, audio, design, research, models and platforms</li>
+                 <li>Each record includes pricing model, core tags and a one-line positioning</li>
+               </ul>
+               <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">Submissions</h2>
+               <p>To submit or correct an entry, please contact the site owner through the admin console.</p>`
+            : `<p>SoMarkIt 是一个由站长人工筛选 + 持续维护的 AI 工具导航站。我们不追求收录最多，而是希望每个被收录的工具都经过实际验证，并配上清楚的定位说明。</p>
+               <p>站点运行在 Cloudflare Workers + D1 之上，内容通过自带的管理后台维护，收录与更新实时生效。</p>
+               <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">我们收录什么</h2>
+               <ul style="padding-left:20px">
+                 <li>可公开访问、有明确价值的 AI 产品与服务</li>
+                 <li>覆盖对话、智能体、编程、办公、图像、视频、音频、设计、研究、行业、大模型、开发平台等门类</li>
+                 <li>每条记录包含定价模式、核心标签与一句话定位</li>
+               </ul>
+               <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">收录提交</h2>
+               <p>如需提交或纠正收录信息，请通过站点管理后台联系站长。</p>`}
+        </div>
+      </div>
+    </main>
+    ${footer(new Date().getFullYear(), lang)}
+  </div>
+</div>
+${pageLoader()}
+<script src="/assets/site.js" defer></script>
+</body></html>`;
+  return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+}
+
+export function notFoundPage({ categories, counts, total, theme, lang = 'zh' }) {
+  const isEn = normalizeLang(lang) === 'en';
+  return new Response(
+    `${head({ title: isEn ? 'Page not found | SoMarkIt' : '页面不存在 | SoMarkIt', description: t(lang, 'seo.siteDesc'), theme, lang })}
+<body>
+<div class="app-layout">
+  ${sidebar({ categories, counts, activeSlug: 'all', total, lang })}
+  <div class="main-wrapper">${mobileHeader(lang)}${topbar({ categories, lang })}
+    <main id="main-content" class="detail-wrap" style="text-align:center;padding-top:120px">
+      <div style="font-size:72px;font-weight:800;letter-spacing:-.04em;color:var(--text-tertiary)">404</div>
+      <h1 class="detail-title" style="margin-top:8px">${isEn ? 'This tool has not been marked yet' : '这个工具还没有被标记'}</h1>
+      <p style="color:var(--text-tertiary);margin-bottom:24px">${isEn ? 'The page does not exist, or the tool has been removed.' : '页面不存在，或者工具已被移除。'}</p>
+      <a href="/" class="nav-btn nav-btn-primary" style="height:40px;padding:0 18px">${isEn ? 'Back to home' : '返回首页'}</a>
+    </main>
+    ${footer(new Date().getFullYear(), lang)}
+  </div>
+</div>
+${pageLoader()}
+<script src="/assets/site.js" defer></script>
+</body></html>`,
+    { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } }
+  );
+}
+
+// --- submit a tool ----------------------------------------------------------
+
+export function submitPage({ categories, counts, total, theme, lang = 'zh', error = '', values = {} }) {
+  const isEn = normalizeLang(lang) === 'en';
+  const v = values || {};
+
+  const catOpts = categories
+    .map((c) => `<option value="${c.id}" ${String(c.id) === String(v.category_id) ? 'selected' : ''}>${esc(categoryLabel(c, lang))}</option>`)
+    .join('');
+
+  const priceOpts = ['free', 'freemium', 'paid', 'opensource']
+    .map((k) => `<option value="${k}" ${k === (v.pricing || 'freemium') ? 'selected' : ''}>${esc(pricingLabel(lang, k))}</option>`)
+    .join('');
+
+  const err = error ? `<div class="form-alert form-alert-error" role="alert">${esc(error)}</div>` : '';
+
+  const body = `${head({
+    title: `${t(lang, 'submit.title')} — SoMarkIt`,
+    description: t(lang, 'submit.lead'),
+    canonical: 'https://somarkit.com/submit',
+    jsonLd: [],
+    theme,
+    lang,
+  })}
+<body>
+<a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
+<div class="app-layout">
+  ${sidebar({ categories, counts, activeSlug: 'submit', total, lang })}
+  <div class="main-wrapper">
+    ${mobileHeader(lang)}
+    ${topbar({ categories, lang })}
+    <main id="main-content" class="detail-wrap">
+      <div class="detail-card submit-card">
+        <h1 class="detail-title">${esc(t(lang, 'submit.title'))}</h1>
+        <p class="submit-lead">${esc(t(lang, 'submit.lead'))}</p>
+        ${err}
+        <form method="post" action="/submit" class="submit-form" novalidate>
+          <div class="form-row">
+            <label class="form-field">
+              <span class="form-label">${esc(t(lang, 'submit.name'))} <em>*</em></span>
+              <input class="form-input" type="text" name="name" required maxlength="80"
+                value="${esc(v.name || '')}" placeholder="${esc(t(lang, 'submit.namePh'))}">
+            </label>
+            <label class="form-field">
+              <span class="form-label">${esc(t(lang, 'submit.url'))} <em>*</em></span>
+              <input class="form-input" type="url" name="url" required
+                value="${esc(v.url || '')}" placeholder="${esc(t(lang, 'submit.urlPh'))}">
+            </label>
+          </div>
+
+          <div class="form-row">
+            <label class="form-field">
+              <span class="form-label">${esc(t(lang, 'submit.category'))} <em>*</em></span>
+              <select class="form-input" name="category_id" required>
+                <option value="">${esc(t(lang, 'submit.categoryPh'))}</option>
+                ${catOpts}
+              </select>
+            </label>
+            <label class="form-field">
+              <span class="form-label">${esc(t(lang, 'submit.pricing'))}</span>
+              <select class="form-input" name="pricing">${priceOpts}</select>
+            </label>
+          </div>
+
+          <label class="form-field">
+            <span class="form-label">${esc(t(lang, 'submit.description'))}</span>
+            <input class="form-input" type="text" name="description" maxlength="300"
+              value="${esc(v.description || '')}" placeholder="${esc(t(lang, 'submit.descriptionPh'))}">
+          </label>
+
+          <label class="form-field">
+            <span class="form-label">${esc(t(lang, 'submit.tags'))}</span>
+            <input class="form-input" type="text" name="tags" maxlength="120"
+              value="${esc(v.tags || '')}" placeholder="${esc(t(lang, 'submit.tagsPh'))}">
+          </label>
+
+          <div class="form-row">
+            <label class="form-field">
+              <span class="form-label">${esc(t(lang, 'submit.yourName'))}</span>
+              <input class="form-input" type="text" name="submitter_name" maxlength="60"
+                value="${esc(v.submitter_name || '')}" placeholder="${esc(t(lang, 'submit.yourNamePh'))}">
+            </label>
+            <label class="form-field">
+              <span class="form-label">${esc(t(lang, 'submit.yourEmail'))}</span>
+              <input class="form-input" type="email" name="submitter_email" maxlength="120"
+                value="${esc(v.submitter_email || '')}" placeholder="${esc(t(lang, 'submit.yourEmailPh'))}">
+            </label>
+          </div>
+
+          <label class="form-field">
+            <span class="form-label">${esc(t(lang, 'submit.note'))}</span>
+            <textarea class="form-input form-textarea" name="note" maxlength="800"
+              placeholder="${esc(t(lang, 'submit.notePh'))}">${esc(v.note || '')}</textarea>
+          </label>
+
+          <!-- Honeypot: real users never see or fill this. -->
+          <div class="hp-field" aria-hidden="true">
+            <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+          </div>
+
+          <div class="submit-actions">
+            <button class="nav-btn nav-btn-primary" type="submit" style="height:40px;padding:0 22px">${esc(t(lang, 'submit.submitBtn'))}</button>
+            <a class="nav-btn" href="/" style="height:40px;padding:0 16px">${esc(t(lang, 'submit.back'))}</a>
+          </div>
+          <p class="submit-privacy">${esc(t(lang, 'submit.privacy'))}</p>
+        </form>
+      </div>
+    </main>
+    ${footer(new Date().getFullYear(), lang)}
+  </div>
+</div>
+${pageLoader()}
+<script src="/assets/site.js" defer></script>
+</body></html>`;
+
+  return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+}
+
+export function submitSuccessPage({ categories, counts, total, theme, lang = 'zh' }) {
+  const body = `${head({
+    title: `${t(lang, 'submit.successTitle')} — SoMarkIt`,
+    description: t(lang, 'submit.successBody'),
+    canonical: 'https://somarkit.com/submit',
+    jsonLd: [],
+    theme,
+    lang,
+  })}
+<body>
+<div class="app-layout">
+  ${sidebar({ categories, counts, activeSlug: 'submit', total, lang })}
+  <div class="main-wrapper">
+    ${mobileHeader(lang)}
+    ${topbar({ categories, lang })}
+    <main id="main-content" class="detail-wrap" style="text-align:center;padding-top:80px">
+      <div class="submit-success-icon">${UI.check}</div>
+      <h1 class="detail-title">${esc(t(lang, 'submit.successTitle'))}</h1>
+      <p style="color:var(--text-tertiary);margin:8px 0 28px">${esc(t(lang, 'submit.successBody'))}</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <a href="/submit" class="nav-btn" style="height:40px;padding:0 18px">${esc(t(lang, 'submit.again'))}</a>
+        <a href="/" class="nav-btn nav-btn-primary" style="height:40px;padding:0 18px">${esc(t(lang, 'submit.back'))}</a>
+      </div>
+    </main>
+    ${footer(new Date().getFullYear(), lang)}
+  </div>
+</div>
+${pageLoader()}
+<script src="/assets/site.js" defer></script>
+</body></html>`;
+
+  return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+}

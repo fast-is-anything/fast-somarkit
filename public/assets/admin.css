@@ -1,0 +1,647 @@
+/* ==========================================================================
+   SoMarkIt — admin console
+   ========================================================================== */
+
+:root {
+  --ad-bg: #F8FAFC;
+  --ad-surface: #FFFFFF;
+  --ad-surface-2: #F8FAFC;
+  /* Light rail: a tinted panel instead of a near-black slab. */
+  --ad-sidebar: #F4F5FA;
+  --ad-sidebar-hover: rgba(15, 23, 42, .05);
+  --ad-sidebar-active: #FFFFFF;
+  --ad-sidebar-text: #5B6478;
+  --ad-sidebar-text-active: #0F172A;
+  --ad-sidebar-brand: #0F172A;
+  --ad-sidebar-divider: rgba(15, 23, 42, .08);
+  --ad-sidebar-icon: #8A93A6;
+  --ad-border: #E2E8F0;
+  --ad-border-soft: #EEF2F6;
+  --ad-text: #0F172A;
+  --ad-text-2: #475569;
+  --ad-text-3: #94A3B8;
+  --ad-primary: #4F46E5;
+  --ad-primary-hover: #4338CA;
+  --ad-primary-soft: #EEF2FF;
+  --ad-danger: #DC2626;
+  --ad-danger-soft: #FEF2F2;
+  --ad-success: #16A34A;
+  --ad-success-soft: #F0FDF4;
+  --ad-warn: #D97706;
+  --ad-warn-soft: #FFFBEB;
+  --ad-radius: 10px;
+  --ad-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 1px 3px rgba(15, 23, 42, .06);
+  --ad-shadow-lg: 0 10px 32px rgba(15, 23, 42, .12);
+  --ad-sidebar-w: 244px;
+  --ad-sidebar-w-collapsed: 72px;
+  --ad-font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
+    "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+[data-ad-theme="dark"] {
+  --ad-bg: #060B16;
+  --ad-surface: #0E1729;
+  --ad-surface-2: #131E33;
+  --ad-sidebar: #0A1120;
+  --ad-sidebar-hover: rgba(255, 255, 255, .05);
+  --ad-sidebar-active: rgba(129, 140, 248, .16);
+  --ad-sidebar-text: #94A3B8;
+  --ad-sidebar-text-active: #E2E8F0;
+  --ad-sidebar-brand: #FFFFFF;
+  --ad-sidebar-divider: rgba(255, 255, 255, .07);
+  --ad-sidebar-icon: #94A3B8;
+  --ad-border: #1E293B;
+  --ad-border-soft: #16213A;
+  --ad-text: #F1F5F9;
+  --ad-text-2: #CBD5E1;
+  --ad-text-3: #7C8BA1;
+  --ad-primary: #818CF8;
+  --ad-primary-hover: #A5B4FC;
+  --ad-primary-soft: rgba(129, 140, 248, .14);
+  --ad-danger: #F87171;
+  --ad-danger-soft: rgba(248, 113, 113, .12);
+  --ad-success: #4ADE80;
+  --ad-success-soft: rgba(74, 222, 128, .1);
+  --ad-warn: #FBBF24;
+  --ad-warn-soft: rgba(251, 191, 36, .1);
+  --ad-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  --ad-shadow-lg: 0 10px 32px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: var(--ad-font);
+  background: var(--ad-bg);
+  color: var(--ad-text);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; }
+:focus-visible { outline: 2px solid var(--ad-primary); outline-offset: 2px; border-radius: 4px; }
+
+/* ---------------------------------------------------------------- layout */
+.ad-shell { display: flex; min-height: 100vh; }
+
+.ad-sidebar {
+  position: fixed; inset: 0 auto 0 0;
+  width: var(--ad-sidebar-w);
+  background: var(--ad-sidebar);
+  border-right: 1px solid rgba(255, 255, 255, .06);
+  display: flex; flex-direction: column;
+  z-index: 60;
+  transition: width .22s cubic-bezier(.4, 0, .2, 1), transform .22s cubic-bezier(.4, 0, .2, 1);
+  overflow: hidden;
+}
+
+.ad-sidebar-top {
+  height: 60px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--ad-sidebar-divider);
+}
+.ad-brand {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--ad-sidebar-brand); font-weight: 700; font-size: 15px;
+  letter-spacing: -.02em; white-space: nowrap; min-width: 0; flex: 1;
+}
+.ad-brand-mark {
+  width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px;
+  /* Neutral tile: the logo brings its own purple + yellow. */
+  background: var(--ad-sidebar-hover);
+  display: grid; place-items: center;
+}
+.ad-brand-mark svg { width: 20px; height: 20px; display: block; }
+.ad-brand-sub { font-size: 10px; font-weight: 500; color: var(--ad-sidebar-text); letter-spacing: .04em; text-transform: uppercase; }
+.ad-brand-text { overflow: hidden; }
+
+.ad-collapse-btn {
+  display: grid; place-items: center;
+  width: 28px; height: 28px; flex-shrink: 0;
+  border: 1px solid var(--ad-sidebar-divider);
+  border-radius: 7px;
+  background: transparent; color: var(--ad-sidebar-text);
+  cursor: pointer; transition: all .15s ease;
+}
+.ad-collapse-btn:hover { background: var(--ad-sidebar-hover); color: var(--ad-sidebar-text-active); }
+
+.ad-nav {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 12px 10px; display: flex; flex-direction: column; gap: 2px;
+  scrollbar-width: thin;
+}
+.ad-nav::-webkit-scrollbar { width: 6px; }
+.ad-nav::-webkit-scrollbar-thumb { background: var(--ad-sidebar-divider); border-radius: 3px; }
+
+.ad-nav-label {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ad-sidebar-icon);
+  padding: 14px 10px 6px; white-space: nowrap; overflow: hidden;
+}
+
+.ad-nav-item {
+  display: flex; align-items: center; gap: 11px;
+  height: 38px; padding: 0 10px;
+  border-radius: 8px;
+  color: var(--ad-sidebar-text);
+  font-size: 13.5px; font-weight: 500;
+  white-space: nowrap; overflow: hidden;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+  border: none; background: transparent; width: 100%; text-align: left;
+}
+.ad-nav-item:hover { background: var(--ad-sidebar-hover); color: var(--ad-sidebar-text-active); }
+.ad-nav-item.active {
+  background: var(--ad-sidebar-active);
+  color: var(--ad-sidebar-text-active);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 1px 3px rgba(15, 23, 42, .04);
+}
+.ad-nav-item.active .ad-nav-icon { color: var(--ad-primary); }
+.ad-nav-icon { display: grid; place-items: center; flex-shrink: 0; }
+.ad-nav-text { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.ad-nav-badge {
+  font-size: 10.5px; font-weight: 600; padding: 1px 6px;
+  border-radius: 999px; background: var(--ad-sidebar-hover); color: var(--ad-sidebar-text);
+  flex-shrink: 0; font-variant-numeric: tabular-nums;
+}
+
+.ad-sidebar-foot {
+  flex-shrink: 0; padding: 10px;
+  border-top: 1px solid var(--ad-sidebar-divider);
+}
+.ad-user {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: 8px;
+  min-width: 0;
+}
+.ad-user:hover { background: var(--ad-sidebar-hover); }
+.ad-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #6366F1, #EC4899);
+  color: #fff; font-size: 12px; font-weight: 700;
+  overflow: hidden;
+}
+.ad-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ad-user-meta { min-width: 0; flex: 1; }
+.ad-user-name {
+  font-size: 12.5px; font-weight: 600; color: var(--ad-sidebar-text-active);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ad-user-role { font-size: 10.5px; color: var(--ad-sidebar-icon); }
+.ad-logout {
+  display: grid; place-items: center; width: 28px; height: 28px;
+  border-radius: 6px; color: var(--ad-sidebar-icon); flex-shrink: 0;
+  transition: all .15s ease;
+}
+.ad-logout:hover { background: var(--ad-danger-soft); color: var(--ad-danger); }
+
+/* Collapsed */
+.ad-shell.collapsed { --ad-sidebar-w: var(--ad-sidebar-w-collapsed); }
+.ad-shell.collapsed .ad-brand-text,
+.ad-shell.collapsed .ad-nav-text,
+.ad-shell.collapsed .ad-nav-badge,
+.ad-shell.collapsed .ad-nav-label,
+.ad-shell.collapsed .ad-user-meta,
+.ad-shell.collapsed .ad-logout,
+.ad-shell.collapsed .ad-collapse-btn { display: none; }
+.ad-shell.collapsed .ad-sidebar-top { justify-content: center; padding: 0; }
+.ad-shell.collapsed .ad-brand { flex: 0 0 auto; }
+/* Collapsed rail: logo doubles as the expand control. */
+.ad-shell.collapsed .ad-brand {
+  padding: 3px;
+  border-radius: 8px;
+  transition: background .15s ease, transform .15s ease;
+}
+.ad-shell.collapsed .ad-brand:hover { background: rgba(255, 255, 255, .1); transform: scale(1.05); }
+.ad-shell.collapsed .ad-brand:active { transform: scale(.97); }
+.ad-shell.collapsed .ad-nav-item { justify-content: center; padding: 0; height: 40px; }
+.ad-shell.collapsed .ad-nav { padding: 12px 12px; }
+.ad-shell.collapsed .ad-nav-label { padding: 8px 0 0; height: 1px; overflow: hidden; }
+.ad-shell.collapsed .ad-user { justify-content: center; padding: 8px 0; }
+.ad-shell.collapsed .ad-float-toggle { display: grid !important; }
+
+/* Collapsed-state expand affordance lives on the topbar */
+.ad-float-toggle { display: none !important; }
+
+.ad-main {
+  flex: 1; min-width: 0;
+  margin-left: var(--ad-sidebar-w);
+  transition: margin-left .22s cubic-bezier(.4, 0, .2, 1);
+  display: flex; flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ---------------------------------------------------------------- topbar */
+.ad-topbar {
+  position: sticky; top: 0; z-index: 40;
+  height: 60px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 24px;
+  background: color-mix(in srgb, var(--ad-bg) 86%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--ad-border);
+}
+.ad-topbar h1 {
+  margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ad-crumb { font-size: 12.5px; color: var(--ad-text-3); }
+.ad-topbar-spacer { flex: 1; }
+.ad-topbar-actions { display: flex; align-items: center; gap: 8px; }
+
+.ad-icon-btn {
+  display: grid; place-items: center;
+  width: 34px; height: 34px;
+  border: 1px solid var(--ad-border);
+  background: var(--ad-surface);
+  border-radius: 8px;
+  color: var(--ad-text-2);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.ad-icon-btn:hover { background: var(--ad-surface-2); color: var(--ad-text); }
+
+.ad-content { padding: 24px; flex: 1; max-width: 1320px; width: 100%; }
+
+/* ---------------------------------------------------------------- pieces */
+.ad-card {
+  background: var(--ad-surface);
+  border: 1px solid var(--ad-border);
+  border-radius: 12px;
+  box-shadow: var(--ad-shadow);
+}
+.ad-card-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--ad-border-soft);
+  flex-wrap: wrap;
+}
+.ad-card-head h2 { margin: 0; font-size: 14px; font-weight: 650; }
+.ad-card-head .spacer { flex: 1; }
+.ad-card-body { padding: 18px; }
+
+.ad-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.ad-stat {
+  padding: 16px 18px;
+  background: var(--ad-surface);
+  border: 1px solid var(--ad-border);
+  border-radius: 12px;
+  box-shadow: var(--ad-shadow);
+}
+.ad-stat-label { font-size: 12px; color: var(--ad-text-3); font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.ad-stat-value { font-size: 26px; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.ad-stat-sub { font-size: 11.5px; color: var(--ad-text-3); }
+
+/* buttons */
+.ad-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 34px; padding: 0 13px;
+  font-size: 13px; font-weight: 500; font-family: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--ad-border);
+  background: var(--ad-surface);
+  color: var(--ad-text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s ease;
+}
+.ad-btn:hover { background: var(--ad-surface-2); }
+.ad-btn-primary {
+  background: var(--ad-primary); border-color: var(--ad-primary);
+  color: #fff;
+}
+.ad-btn-primary:hover { background: var(--ad-primary-hover); border-color: var(--ad-primary-hover); }
+.ad-btn-danger { color: var(--ad-danger); border-color: var(--ad-border); }
+.ad-btn-danger:hover { background: var(--ad-danger-soft); border-color: var(--ad-danger); }
+.ad-btn-sm { height: 28px; padding: 0 9px; font-size: 12px; border-radius: 7px; }
+.ad-btn-ghost { border-color: transparent; background: transparent; }
+.ad-btn-ghost:hover { background: var(--ad-surface-2); }
+.ad-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+/* forms */
+.ad-field { margin-bottom: 16px; }
+.ad-field label, .ad-label {
+  display: block; font-size: 12.5px; font-weight: 600;
+  color: var(--ad-text-2); margin-bottom: 6px;
+}
+.ad-hint { font-size: 11.5px; color: var(--ad-text-3); margin-top: 4px; }
+.ad-input, .ad-select, .ad-textarea {
+  width: 100%;
+  font-family: inherit; font-size: 13.5px;
+  color: var(--ad-text);
+  background: var(--ad-surface);
+  border: 1px solid var(--ad-border);
+  border-radius: 8px;
+  padding: 8px 11px;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ad-input, .ad-select { height: 36px; padding: 0 11px; }
+.ad-textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
+.ad-input:focus, .ad-select:focus, .ad-textarea:focus {
+  border-color: var(--ad-primary);
+  box-shadow: 0 0 0 3px var(--ad-primary-soft);
+}
+.ad-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ad-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ad-text-2); cursor: pointer; }
+.ad-check input { width: 15px; height: 15px; accent-color: var(--ad-primary); cursor: pointer; }
+
+/* table */
+.ad-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.ad-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  /* Let the browser size columns to content first; the first column then
+     absorbs whatever is left. This is what stops CJK cells from being
+     squeezed into one-character-per-line columns. */
+  table-layout: auto;
+}
+.ad-table th {
+  text-align: left; font-weight: 600; font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ad-text-3);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ad-border);
+  white-space: nowrap;
+  background: var(--ad-surface-2);
+}
+.ad-table td { padding: 11px 14px; border-bottom: 1px solid var(--ad-border-soft); vertical-align: middle; }
+.ad-table tbody tr:hover { background: var(--ad-surface-2); }
+.ad-table tbody tr:last-child td { border-bottom: none; }
+.ad-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ad-cell-main { font-weight: 600; }
+.ad-cell-sub { font-size: 11.5px; color: var(--ad-text-3); }
+
+/* Status / pricing / date cells are short labels: never wrap them, and never
+   let the browser shrink them to a single glyph. */
+.ad-table td:has(.ad-pill),
+.ad-table td:has(.pricing-tag),
+.ad-table td.ad-cell-nowrap,
+.ad-table td.ad-cell-date { white-space: nowrap; }
+
+/* The first (name) column carries the flexible width and wraps normally. */
+.ad-table td:first-child { min-width: 180px; }
+.ad-cell-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.ad-cell-actions {
+  display: flex; gap: 4px; justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive table → stacked cards.
+   Below 1100px the admin table becomes a card list: each row is a block whose
+   cells are laid out with their header label. This removes horizontal
+   scrolling entirely and keeps CJK text on one readable line.
+   -------------------------------------------------------------------------- */
+@media (max-width: 1100px) {
+  .ad-table-wrap { overflow-x: visible; }
+
+  /* Each row becomes a card: a two-column grid of label/value pairs so the
+     layout stays compact instead of stacking every field vertically. */
+  table.ad-table,
+  table.ad-table tbody { display: block; width: 100%; }
+
+  table.ad-table thead { display: none; }
+  table.ad-table td[data-label="标记"] { display: none; }
+
+  table.ad-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px 16px;
+    align-items: start;
+    position: relative;
+    padding: 14px;
+    margin-bottom: 10px;
+    border: 1px solid var(--ad-border);
+    border-radius: 12px;
+    background: var(--ad-surface);
+    box-shadow: var(--ad-shadow);
+  }
+  table.ad-table tbody tr:hover { background: var(--ad-surface); }
+  table.ad-table tbody tr:last-child { margin-bottom: 0; }
+
+  table.ad-table td {
+    display: block;
+    width: auto;
+    border: none;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+  }
+
+  /* The name cell spans the full card width. */
+  table.ad-table td:first-child {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  /* Titles in the dashboard cards are short (name + slug) and do not need the
+     whole row; keep the first row compact when the card is wide enough. */
+  table.ad-table.compact-cards td:first-child { grid-column: auto; }
+
+  /* Compact inline labels. */
+  table.ad-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ad-text-3);
+    margin-bottom: 2px;
+  }
+  table.ad-table td[data-label="工具"]::before { display: none; }
+  .ad-cell-sub { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Actions always occupy their own full-width row. */
+  table.ad-table td.ad-cell-actions-cell {
+    grid-column: 1 / -1;
+    display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-start;
+    margin-top: 2px; padding-top: 10px;
+    border-top: 1px solid var(--ad-border-soft);
+  }
+  table.ad-table td.ad-cell-actions-cell .ad-cell-actions {
+    justify-content: flex-start; flex-wrap: wrap; width: 100%;
+  }
+
+  /* Empty-state row must not look like a card. */
+  table.ad-table tbody tr:has(.ad-empty) {
+    display: block;
+    border: none; box-shadow: none; background: transparent; padding: 0;
+  }
+}
+
+.ad-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 20px; padding: 0 7px;
+  font-size: 11px; font-weight: 600;
+  border-radius: 999px;
+}
+.ad-pill-green { color: var(--ad-success); background: var(--ad-success-soft); }
+.ad-pill-blue { color: var(--ad-primary); background: var(--ad-primary-soft); }
+.ad-pill-warn { color: var(--ad-warn); background: var(--ad-warn-soft); }
+.ad-pill-gray { color: var(--ad-text-3); background: var(--ad-surface-2); }
+.ad-pill-red { color: var(--ad-danger); background: var(--ad-danger-soft); }
+
+/* alerts */
+.ad-alert {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 14px; border-radius: 9px;
+  font-size: 13px; margin-bottom: 16px;
+}
+.ad-alert-success { background: var(--ad-success-soft); color: var(--ad-success); }
+.ad-alert-error { background: var(--ad-danger-soft); color: var(--ad-danger); }
+.ad-alert-info { background: var(--ad-primary-soft); color: var(--ad-primary); }
+.ad-alert-warn { background: var(--ad-warn-soft); color: var(--ad-warn); }
+
+/* empty */
+.ad-empty { text-align: center; padding: 56px 20px; color: var(--ad-text-3); }
+.ad-empty svg { opacity: .45; margin-bottom: 10px; }
+.ad-empty h3 { margin: 0 0 4px; font-size: 14px; color: var(--ad-text-2); }
+.ad-empty p { margin: 0 0 16px; font-size: 13px; }
+
+/* pagination */
+.ad-pager { display: flex; align-items: center; gap: 6px; padding: 12px 18px; border-top: 1px solid var(--ad-border-soft); }
+.ad-pager a, .ad-pager span {
+  display: grid; place-items: center;
+  min-width: 30px; height: 30px; padding: 0 8px;
+  font-size: 12.5px; border-radius: 7px;
+  border: 1px solid var(--ad-border); color: var(--ad-text-2);
+}
+.ad-pager a:hover { background: var(--ad-surface-2); }
+.ad-pager .cur { background: var(--ad-primary); border-color: var(--ad-primary); color: #fff; font-weight: 600; }
+.ad-pager .spacer { flex: 1; border: none; }
+
+/* toolbar */
+.ad-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ad-toolbar .ad-input, .ad-toolbar .ad-select { width: auto; min-width: 140px; }
+.ad-search { position: relative; }
+.ad-search .ad-input { padding-left: 32px; min-width: 240px; }
+.ad-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--ad-text-3); pointer-events: none; }
+
+/* toast */
+.ad-toast {
+  position: fixed; right: 20px; bottom: 20px; z-index: 200;
+  padding: 12px 16px; border-radius: 10px;
+  background: #0F172A; color: #fff; font-size: 13px;
+  box-shadow: var(--ad-shadow-lg);
+  opacity: 0; transform: translateY(10px);
+  transition: opacity .2s ease, transform .2s ease;
+  pointer-events: none;
+}
+.ad-toast.show { opacity: 1; transform: translateY(0); }
+
+/* login page */
+.ad-login-wrap {
+  min-height: 100vh; display: grid; place-items: center; padding: 24px;
+  background:
+    radial-gradient(900px 400px at 50% -20%, rgba(99, 102, 241, .13), transparent 70%),
+    var(--ad-bg);
+}
+.ad-login-card {
+  width: 100%; max-width: 380px;
+  background: var(--ad-surface);
+  border: 1px solid var(--ad-border);
+  border-radius: 16px;
+  box-shadow: var(--ad-shadow-lg);
+  padding: 32px 28px;
+  text-align: center;
+}
+.ad-login-mark {
+  width: 52px; height: 52px; margin: 0 auto 16px;
+  border-radius: 14px;
+  background: var(--ad-surface-2);
+  border: 1px solid var(--ad-border);
+  display: grid; place-items: center;
+}
+.ad-login-mark svg { width: 36px; height: 36px; display: block; }
+.ad-login-mark svg { width: 28px; height: 28px; }
+.ad-login-card h1 { margin: 0 0 6px; font-size: 19px; letter-spacing: -.02em; }
+.ad-login-card p { margin: 0 0 24px; font-size: 13px; color: var(--ad-text-3); }
+.ad-google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; height: 44px;
+  border-radius: 9px;
+  border: 1px solid var(--ad-border);
+  background: var(--ad-surface);
+  color: var(--ad-text);
+  font-size: 14px; font-weight: 500; font-family: inherit;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.ad-google-btn:hover { background: var(--ad-surface-2); box-shadow: var(--ad-shadow); }
+.ad-login-foot { margin-top: 22px; font-size: 11.5px; color: var(--ad-text-3); line-height: 1.7; }
+
+/* mobile */
+.ad-overlay { display: none; position: fixed; inset: 0; z-index: 55; background: rgba(2, 6, 23, .5); }
+.ad-mobile-toggle { display: none; }
+
+@media (max-width: 900px) {
+  .ad-shell { --ad-sidebar-w: 0px; }
+  .ad-shell .ad-sidebar { transform: translateX(-100%); width: 244px; }
+  .ad-shell.nav-open .ad-sidebar { transform: translateX(0); }
+  .ad-shell.nav-open .ad-overlay { display: block; }
+  .ad-main { margin-left: 0; }
+  .ad-mobile-toggle { display: grid; }
+  .ad-content { padding: 16px; }
+  .ad-topbar { padding: 0 14px; }
+  .ad-row { grid-template-columns: 1fr; }
+
+  /* Stats: two per row on tablets, one per row on phones. */
+  .ad-stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .ad-stat { padding: 13px 15px; }
+  .ad-stat-value { font-size: 22px; }
+
+  /* Toolbar: search takes a full row, selects share the next. */
+  .ad-toolbar { width: 100%; flex: 1 1 100%; }
+  .ad-toolbar .ad-search { flex: 1 1 100%; }
+  .ad-toolbar .ad-search .ad-input { width: 100%; min-width: 0; }
+  .ad-toolbar .ad-select { flex: 1 1 calc(50% - 4px); min-width: 0; }
+  .ad-toolbar .ad-btn { flex: 0 0 auto; }
+
+  /* The primary "add" action drops onto its own row instead of floating
+     beside the filters — but only when cards genuinely get narrow. */
+  .ad-card-head > .ad-btn-primary { flex: 0 0 auto; }
+
+  .ad-card-head { padding: 12px 14px; gap: 8px; }
+  .ad-card-body { padding: 14px; }
+
+  /* Dashboard two-column blocks collapse. */
+  .dash-grid { grid-template-columns: 1fr !important; }
+  .form-grid, .imp-grid, .sub-grid { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 560px) {
+  .ad-content { padding: 12px; }
+  .ad-topbar h1 { font-size: 14px; }
+  .ad-crumb { display: none; }
+
+  .ad-stats { grid-template-columns: 1fr 1fr; }
+  .ad-toolbar .ad-select { flex: 1 1 100%; }
+  /* Narrow phones: the add action gets its own full-width row. */
+  .ad-card-head > .ad-btn-primary { flex: 1 1 100%; justify-content: center; }
+
+  /* Card-ified rows: tighten padding on phones. */
+  table.ad-table tbody tr { padding: 12px; }
+  .ad-btn-sm { height: 30px; }
+
+  /* Pager: keep the page buttons reachable without wrapping oddly. */
+  .ad-pager { flex-wrap: wrap; gap: 4px; padding: 12px 14px; }
+  .ad-pager .spacer { display: none; }
+}
+
+/* Very narrow phones: single-column stats. */
+@media (max-width: 380px) {
+  .ad-stats { grid-template-columns: 1fr; }
+}

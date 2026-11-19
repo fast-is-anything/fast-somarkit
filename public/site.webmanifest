@@ -1,0 +1,14 @@
+{
+  "name": "SoMarkIt — AI 工具导航",
+  "short_name": "SoMarkIt",
+  "description": "精选收藏的优质 AI 工具导航，覆盖对话、智能体、编程、办公、图像、视频等分类。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#4F46E5",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
