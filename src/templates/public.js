@@ -394,6 +394,7 @@ export function toolCard(item, lang = DEFAULT_LANG) {
   return `<div class="tool-card" role="listitem"
     data-category="${esc(item.category_slug || '')}"
     data-pricing="${esc(item.pricing)}"
+    data-cursor="${Number(item.sort_order) || 0}:${encodeURIComponent(item.name || '')}:${item.id}"
     data-search="${esc(haystack)}">
     <div class="tool-card-header">
       ${logoBox(item, 'tool-card-logo')}
@@ -433,6 +434,9 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEF
   // rather than `mode`, because category pages also ship the full catalogue
   // (mode 'all') and only differ in what is initially shown.
   const restrictToActive = initialVisibleCount != null;
+  // Only a category page can paginate, and only the section it opened: the
+  // homepage is a fixed preview. data-paginate is what the client checks before
+  // attaching a sentinel, so a rail never starts growing by accident.
   const sections = groups
     .map((g) => {
       const cards = g.tools.map((tool) => toolCard(tool, lang)).join('\n');
@@ -458,6 +462,7 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEF
         data-category="${esc(g.category.slug)}"
         data-rendered="${shown}"
         data-total="${g.total ?? shown}"
+        ${paginateActive ? 'data-paginate="1"' : ''}
         ${open ? `data-has-more="1"${cursorAttr}` : ''}${hiddenAttr}>
         <div class="category-section-header">
           <span class="cat-icon">${icon(g.category.icon)}</span>

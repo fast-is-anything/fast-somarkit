@@ -242,6 +242,9 @@
       items[i].classList.toggle('active', items[i].getAttribute('data-category') === cat);
     }
     applyFilters();
+    // The newly shown section may still have cards to pull in; the rail module
+    // attaches its sentinel on demand.
+    if (window.__railSync) window.__railSync();
   }
 
   function setPricing(p) {
@@ -541,61 +544,140 @@
 
   /* ------------------------------------------- category page infinite scroll */
   /*
-   * Only the section the reader opened carries data-has-more (see
-   * contentArea): a category page marks its active category, the homepage marks
-   * nothing. A sentinel under that grid starts an IntersectionObserver that
-   * appends the next page, so the homepage keeps a fixed preview while a
-   * category page can be browsed in full.
+   * A category page can be browsed in full; the homepage cannot.
+   *
+   *   - The homepage renders every rail as a fixed preview and marks nothing,
+   *     so nothing here ever runs.
+   *   - A category page records the catalogue size in data-total and the
+   *     rendered size in data-rendered. Once a section is the one being viewed,
+   *     a sentinel under its grid pulls the remaining pages.
+   *
+   * "Being viewed" is not fixed at load time: switching categories is a
+   * client-side operation, so whichever section is active gets a sentinel
+   * attached on demand. Each section keeps its own cursor/done state on the
+   * element, so loading one never affects another and re-visiting a section
+   * never re-appends cards.
    */
   (function initRail() {
-    var sec = document.querySelector('.category-section[data-has-more="1"]');
-    if (!sec || !('IntersectionObserver' in window)) return;
+    if (!('IntersectionObserver' in window)) return;
+
+    /*
+     * A section is paginable only when it declares data-paginate="1". The
+     * server sets that for the category page's active section only — the
+     * homepage marks nothing, so nothing here ever runs there. Without this
+     * guard syncActive() would attach sentinels to every visible homepage rail
+     * and turn the fixed previews into infinite lists.
+     */
+    function paginable(sec) {
+      return sec && sec.getAttribute('data-paginate') === '1';
+    }
 
     var localeMatch = location.pathname.match(LOCALE_RE);
     var locale = localeMatch ? localeMatch[1] : 'zh';
     var RAIL_API = '/' + locale + '/api/rail';
-    var grid = sec.querySelector('[data-rail-grid]');
-    var sentinel = sec.querySelector('[data-rail-sentinel]');
-    if (!grid || !sentinel) return;
 
-    function loadMore() {
+    var observer = new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting) {
+          var sec = entries[i].target.closest('.category-section');
+          if (sec) loadMore(sec);
+          break;
+        }
+      }
+    }, { rootMargin: '300px 0px' });
+
+    function gridOf(sec) { return sec.querySelector('[data-rail-grid]'); }
+
+    function remaining(sec) {
+      var total = parseInt(sec.getAttribute('data-total'), 10);
+      var rendered = gridOf(sec) ? gridOf(sec).querySelectorAll('.tool-card').length : 0;
+      return Number.isFinite(total) ? total - rendered : 0;
+    }
+
+    /** Give a section a sentinel if it still has cards left and lacks one. */
+    function arm(sec) {
+      if (!paginable(sec) || sec.dataset.done === '1') return;
+      if (!gridOf(sec) || remaining(sec) <= 0) return;
+
+      // The server may have rendered the sentinel already; either way it has to
+      // be registered with the observer, and a section must not be observed
+      // twice.
+      var sentinel = sec.querySelector('[data-rail-sentinel]');
+      if (!sentinel) {
+        sentinel = document.createElement('div');
+        sentinel.className = 'rail-sentinel';
+        sentinel.setAttribute('data-rail-sentinel', '');
+        sentinel.setAttribute('aria-hidden', 'true');
+        gridOf(sec).insertAdjacentElement('afterend', sentinel);
+      }
+      if (sentinel.dataset.observed === '1') return;
+      sentinel.dataset.observed = '1';
+      observer.observe(sentinel);
+    }
+
+    function loadMore(sec) {
+      if (!paginable(sec)) return;
       if (sec.dataset.loading === '1' || sec.dataset.done === '1') return;
+      if (remaining(sec) <= 0) { finish(sec); return; }
       sec.dataset.loading = '1';
 
       var params = new URLSearchParams({ category: sec.getAttribute('data-category') });
+      // No cursor yet? Start after the last card the server rendered.
+      if (!sec.dataset.cursor) {
+        var cards = gridOf(sec).querySelectorAll('.tool-card');
+        var last = cards[cards.length - 1];
+        var c = last && last.getAttribute('data-cursor');
+        if (c) sec.dataset.cursor = c;
+      }
       if (sec.dataset.cursor) params.set('cursor', sec.dataset.cursor);
 
       fetch(RAIL_API + '?' + params.toString(), { credentials: 'same-origin' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (data) {
           sec.dataset.loading = '0';
-          if (!data || !data.ok) { sec.dataset.done = '1'; return; }
+          if (!data || !data.ok) { finish(sec); return; }
 
-          if (data.html) grid.insertAdjacentHTML('beforeend', data.html);
+          if (data.html) gridOf(sec).insertAdjacentHTML('beforeend', data.html);
 
-          // Keep data-rendered in step so the section header count stays right.
-          // The label is formatted by the same dict entry the server used, so
-          // the wording stays in the page's language.
-          var rendered = grid.querySelectorAll('.tool-card').length;
+          // Keep the header count in step, in the page's own language.
+          var rendered = gridOf(sec).querySelectorAll('.tool-card').length;
           sec.setAttribute('data-rendered', rendered);
           var cnt = sec.querySelector('.cat-count');
           if (cnt) cnt.textContent = T.total(rendered);
 
           if (data.nextCursor) {
             sec.dataset.cursor = data.nextCursor;
+            if (remaining(sec) <= 0) finish(sec);
           } else {
-            sec.dataset.done = '1';
-            sec.removeAttribute('data-has-more');
-            sentinel.remove();
+            finish(sec);
           }
         })
         .catch(function () { sec.dataset.loading = '0'; });
     }
 
-    new IntersectionObserver(function (entries) {
-      for (var i = 0; i < entries.length; i++) {
-        if (entries[i].isIntersecting) { loadMore(); break; }
+    function finish(sec) {
+      if (!sec) return;
+      sec.dataset.done = '1';
+      sec.removeAttribute('data-has-more');
+      var s = sec.querySelector('[data-rail-sentinel]');
+      if (s) { observer.unobserve(s); s.remove(); }
+    }
+
+    /* Keep the observer pointed at whichever section is currently shown. */
+    function syncActive() {
+      var secs = document.querySelectorAll('.category-section');
+      for (var i = 0; i < secs.length; i++) {
+        if (secs[i].style.display === 'none') continue;
+        arm(secs[i]);
       }
-    }, { rootMargin: '300px 0px' }).observe(sentinel);
+    }
+
+    // Exposed so the category switcher can re-arm after showing another section.
+    window.__railSync = syncActive;
+
+    // Arm the section that is already visible on load.
+    var initial = document.querySelector('.category-section[data-has-more="1"]');
+    if (initial) arm(initial);
+    syncActive();
   })();
 })();
