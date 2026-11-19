@@ -1090,11 +1090,11 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   background: var(--bg-card); border: 1px solid var(--border-color);
   border-radius: var(--radius-xl); padding: 28px;
 }
-/* Primary CTA row at the bottom of the detail card: the button sits at the
-   right edge, opposite the description text it leads away from. */
+/* Primary CTA row at the bottom of the detail card. Left-aligned so it lines
+   up with the description and tag list above it. */
 .detail-cta {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 /* Legal footnote under the CTA. Deliberately quiet — small, muted and on its
    own line — so it never competes with the button but stays legible. */
