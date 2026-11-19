@@ -84,8 +84,13 @@ function trendOption({ points, gaOk }) {
     yAxis: [
       { type: 'value', name: '次数', splitLine: { lineStyle: { type: 'dashed' } } },
     ],
+    // Zoom/pan are wired manually in admin-analytics.js instead of using
+    // ECharts' `inside` dataZoom: `inside` registers a wheel listener that
+    // calls preventDefault() even when zoomOnMouseWheel is set to 'ctrl', which
+    // swallowed ordinary page scrolling whenever the pointer crossed the chart.
+    // The slider stays declarative here.
     dataZoom: days.length > 20
-      ? [{ type: 'inside' }, { type: 'slider', height: 18, bottom: 6 }]
+      ? [{ type: 'slider', height: 18, bottom: 6 }]
       : [],
     series: [
       {
@@ -278,7 +283,7 @@ export function analyticsPage({ user, env, data, days = 30, flash, ga = null, ga
     <div class="ad-card" style="margin-bottom:16px">
       <div class="ad-card-head">
         <h2>每日趋势</h2><span class="spacer"></span>
-        <span class="an-note">峰值 ${peak} 次 · 日均 ${avg.toFixed(1)} 次</span>
+        <span class="an-note">${days > 20 ? '按住 Ctrl 滚动缩放 · 拖动平移 · ' : ''}峰值 ${peak} 次 · 日均 ${avg.toFixed(1)} 次</span>
       </div>
       <div class="ad-card-body an-chart-body">
         <div class="an-chart" id="anTrend" data-chart="trend"></div>

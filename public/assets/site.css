@@ -202,14 +202,21 @@ img { max-width: 100%; }
 .sidebar-collapse-btn {
   display: grid; place-items: center;
   width: 28px; height: 28px; flex-shrink: 0;
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  /* Bare icon, no boxed background: the sidebar header stays quiet and the
+     button only hints at itself on hover/focus. */
+  border: none;
+  background: transparent;
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
 }
 .sidebar-collapse-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.sidebar-collapse-btn:focus-visible {
+  outline: 2px solid var(--accent, var(--text-primary));
+  outline-offset: 2px;
+  color: var(--text-primary);
+}
 
 .sidebar-nav {
   flex: 1; overflow-y: auto; overflow-x: hidden;

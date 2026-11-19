@@ -119,16 +119,22 @@ button { font-family: inherit; }
 .ad-brand-text { overflow: hidden; }
 
 /* Collapse control: only shown while the sidebar is expanded. Once collapsed,
-   the logo itself becomes the expand control. */
+   the logo itself becomes the expand control.
+   Bare icon — no border and no box, matching the public site's sidebar. */
 .ad-collapse-btn {
   display: grid; place-items: center;
   width: 28px; height: 28px; flex-shrink: 0;
-  border: 1px solid var(--ad-sidebar-divider);
+  border: none;
   border-radius: 7px;
   background: transparent; color: var(--ad-sidebar-text);
-  cursor: pointer; transition: all .15s ease;
+  cursor: pointer;
+  transition: color .15s ease, background-color .15s ease;
 }
 .ad-collapse-btn:hover { background: var(--ad-sidebar-hover); color: var(--ad-sidebar-text-active); }
+.ad-collapse-btn:focus-visible {
+  outline: 2px solid var(--ad-primary);
+  outline-offset: 2px;
+}
 
 /* Collapsed */
 .ad-shell.collapsed { --ad-sidebar-w: var(--ad-sidebar-w-collapsed); }

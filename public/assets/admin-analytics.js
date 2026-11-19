@@ -87,6 +87,7 @@
       if (instances.trend) instances.trend.dispose();
       instances.trend = echarts.init(trendEl, null, { renderer: 'canvas' });
       instances.trend.setOption(themed(data.trend, 'trend'));
+      wireTrendInteractions(trendEl, instances.trend);
     }
 
     ['country', 'referer', 'topTools'].forEach(function (key) {
@@ -95,6 +96,100 @@
       if (instances[key]) instances[key].dispose();
       instances[key] = echarts.init(el, null, { renderer: 'canvas' });
       instances[key].setOption(themed(data[key], key));
+    });
+  }
+
+  /* ---------------------------------------------------- trend interactions --
+   * Zoom and pan are implemented here rather than with ECharts' `inside`
+   * dataZoom. `inside` attaches its own wheel handler that calls
+   * preventDefault() on every wheel event, so the page stopped scrolling
+   * whenever the pointer happened to be over the chart. Here:
+   *   • plain wheel  -> do nothing, the page scrolls normally
+   *   • Ctrl + wheel -> zoom the time axis around the cursor
+   *   • drag         -> pan
+   */
+  function wireTrendInteractions(el, chart) {
+    var current = { start: 0, end: 100 };
+    var MIN_SPAN = 5; // never zoom past ~5% of the range
+
+    function apply(start, end) {
+      var span = end - start;
+      if (span < MIN_SPAN) { span = MIN_SPAN; }
+      if (span > 100) { span = 100; }
+      // Keep the window inside 0..100.
+      var s = Math.min(Math.max(0, start), 100 - span);
+      current = { start: s, end: s + span };
+      chart.dispatchAction({ type: 'dataZoom', start: current.start, end: current.end });
+    }
+
+    function onWheel(e) {
+      // Only intercept Ctrl/Option + wheel; let everything else bubble so the
+      // page keeps its normal scroll behaviour.
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+
+      var opt = chart.getOption();
+      var dz = opt.dataZoom && opt.dataZoom[0];
+      var start = dz && dz.start != null ? dz.start : current.start;
+      var end = dz && dz.end != null ? dz.end : current.end;
+      var span = end - start;
+
+      // Zoom around the cursor position so the point under the pointer stays.
+      var rect = el.getBoundingClientRect();
+      var ratio = rect.width ? (e.clientX - rect.left) / rect.width : 0.5;
+      ratio = Math.min(1, Math.max(0, ratio));
+
+      var factor = e.deltaY > 0 ? 1.2 : 1 / 1.2; // wheel down = zoom out
+      var newSpan = Math.min(100, Math.max(MIN_SPAN, span * factor));
+      var anchor = start + span * ratio;
+      apply(anchor - newSpan * ratio, anchor - newSpan * ratio + newSpan);
+    }
+
+    // Drag to pan (only when zoomed in enough that panning means something).
+    var dragging = false;
+    var dragX = 0;
+    var dragStart = 0;
+    var dragEnd = 100;
+
+    function onDown(e) {
+      if (e.button !== 0) return;
+      var opt = chart.getOption();
+      var dz = opt.dataZoom && opt.dataZoom[0];
+      var span = (dz && dz.end != null ? dz.end : 100) - (dz && dz.start != null ? dz.start : 0);
+      if (span >= 99.5) return; // fully zoomed out: nothing to pan
+      dragging = true;
+      dragX = e.clientX;
+      dragStart = dz.start;
+      dragEnd = dz.end;
+      el.style.cursor = 'grabbing';
+    }
+    function onMove(e) {
+      if (!dragging) return;
+      var rect = el.getBoundingClientRect();
+      if (!rect.width) return;
+      var span = dragEnd - dragStart;
+      var delta = ((dragX - e.clientX) / rect.width) * span;
+      apply(dragStart + delta, dragEnd + delta);
+      e.preventDefault();
+    }
+    function onUp() {
+      dragging = false;
+      el.style.cursor = '';
+    }
+
+    // Listen on the chart element: `wheel` is passive-by-default in Chrome, so
+    // preventDefault only works with an explicit non-passive registration.
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+
+    // Keep our state in sync when the slider is used instead.
+    chart.on('datazoom', function () {
+      if (dragging) return;
+      var opt = chart.getOption();
+      var dz = opt.dataZoom && opt.dataZoom[0];
+      if (dz) current = { start: dz.start, end: dz.end };
     });
   }
 
