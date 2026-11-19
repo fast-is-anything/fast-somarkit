@@ -479,7 +479,11 @@
   }
 
   document.addEventListener('click', function (e) {
-    var a = e.target.closest && e.target.closest('.tool-visit-btn[data-tool-id]');
+    // Any link carrying a tool id is a "visit this tool" action — the card's
+    // button, the detail page's CTA and the hostname in the detail meta all
+    // qualify. Selecting on the attribute (not a style class) keeps tracking
+    // decoupled from how the link happens to look.
+    var a = e.target.closest && e.target.closest('a[data-tool-id]');
     if (!a) return;
     var id = Number(a.getAttribute('data-tool-id'));
     if (!(id > 0)) return;

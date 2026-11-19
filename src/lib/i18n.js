@@ -81,6 +81,11 @@ const DICT = {
     'detail.visitSite': '访问官网',
     'detail.related': '相关工具',
     'detail.notFound': '页面不存在',
+    'detail.disclaimer': '免责声明：测评内容仅代表编辑个人观点和使用体验，不构成任何商业推荐或投资建议。产品信息和价格可能随时变动，请以官方最新信息为准。',
+    'detail.infoCategory': '分类',
+    'detail.infoPrice': '价格',
+    'detail.infoTags': '标签',
+    'detail.infoWebsite': '官网',
 
     // Submit-tool form
     'submit.title': '提交工具',
@@ -184,6 +189,11 @@ const DICT = {
     'detail.visitSite': 'Visit website',
     'detail.related': 'Related tools',
     'detail.notFound': 'Page not found',
+    'detail.disclaimer': "Disclaimer: Review content represents our editorial team's views and experience, not commercial recommendation or investment advice. Product info and pricing may change; refer to official sources.",
+    'detail.infoCategory': 'Category',
+    'detail.infoPrice': 'Pricing',
+    'detail.infoTags': 'Tags',
+    'detail.infoWebsite': 'Website',
 
     // Submit-tool form
     'submit.title': 'Submit a tool',

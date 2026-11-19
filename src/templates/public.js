@@ -500,6 +500,8 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
 
   const relatedCards = related.slice(0, 6).map((x) => toolCard(x, lang)).join('');
   const tags = tool.tags.map((tag) => `<span class="tool-tag">${esc(tag)}</span>`).join('');
+  // Plain-text tag list for the info-card row ("A · B · C").
+  const tagsText = tool.tags.join(' · ');
 
   const body = `${head({
     title: `${tool.name} — ${pricingLabel(lang, tool.pricing)} | SoMarkIt`,
@@ -533,17 +535,40 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
           </h1>
           <div class="detail-meta">
             <span class="pricing-tag pricing-${esc(tool.pricing)}">${esc(pricingLabel(lang, tool.pricing))}</span>
-              <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow" class="tool-visit-btn" data-tool-id="${tool.id}">${esc(hostOf(tool.url))}</a>
+              <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow" data-tool-id="${tool.id}">${esc(hostOf(tool.url))}</a>
             <span class="detail-meta-item">${esc(catName)}</span>
             <span class="detail-meta-item">${esc(t(lang, 'detail.visits', tool.visit_count))}</span>
           </div>
         </div>
         <div class="detail-body">${esc(tool.description || t(lang, 'card.noDesc'))}</div>
         ${tags ? `<div class="tool-tags" style="margin-bottom:24px">${tags}</div>` : ''}
-        <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow" class="nav-btn nav-btn-primary tool-visit-btn"
-          style="height:42px;padding:0 20px;font-size:var(--text-sm)" data-tool-id="${tool.id}">
-          ${esc(t(lang, 'detail.visitSite'))} ${UI.externalLink}
-        </a>
+        <div class="detail-cta">
+          <a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer nofollow" class="nav-btn nav-btn-primary tool-visit-btn"
+            style="height:42px;padding:0 20px;font-size:var(--text-sm)" data-tool-id="${tool.id}">
+            ${esc(t(lang, 'detail.visitSite'))} ${UI.externalLink}
+          </a>
+        </div>
+        <p class="detail-disclaimer">${esc(t(lang, 'detail.disclaimer'))}</p>
+      </div>
+      <div class="tool-info-grid">
+        <div class="tool-info-card">
+          <div class="info-label">${esc(t(lang, 'detail.infoCategory'))}</div>
+          <div class="info-value">${tool.category_name ? esc(tool.category_name) : '—'}</div>
+        </div>
+        <div class="tool-info-card">
+          <div class="info-label">${esc(t(lang, 'detail.infoPrice'))}</div>
+          <div class="info-value">${tool.pricing ? esc(pricingLabel(lang, tool.pricing)) : '—'}</div>
+        </div>
+        <div class="tool-info-card">
+          <div class="info-label">${esc(t(lang, 'detail.infoTags'))}</div>
+          <div class="info-value">${tagsText ? esc(tagsText) : '—'}</div>
+        </div>
+        <div class="tool-info-card">
+          <div class="info-label">${esc(t(lang, 'detail.infoWebsite'))}</div>
+          <div class="info-value">${tool.url
+            ? `<a href="${esc(tool.url)}" target="_blank" rel="noopener noreferrer" style="color:var(--color-primary);text-decoration:none;">${esc(hostOf(tool.url))}</a>`
+            : '—'}</div>
+        </div>
       </div>
       ${related.length ? `<h2 style="font-size:var(--text-lg);margin:36px 0 14px">${esc(t(lang, 'detail.related'))}</h2>
         <div class="tools-grid">${relatedCards}</div>` : ''}

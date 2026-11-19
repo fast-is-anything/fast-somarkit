@@ -1071,6 +1071,67 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   background: var(--bg-card); border: 1px solid var(--border-color);
   border-radius: var(--radius-xl); padding: 28px;
 }
+/* Primary CTA row at the bottom of the detail card: the button sits at the
+   right edge, opposite the description text it leads away from. */
+.detail-cta {
+  display: flex;
+  justify-content: flex-end;
+}
+/* Legal footnote under the CTA. Deliberately quiet — small, muted and on its
+   own line — so it never competes with the button but stays legible. */
+.detail-disclaimer {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+  font-size: var(--text-xs);
+  line-height: 1.7;
+  color: var(--text-tertiary);
+  text-align: left;
+}
+
+/* --------------------------------------------------------------------------
+   Tool info row — a compact strip of key facts (category / pricing / tags /
+   website) between the detail card and the related-tools grid.
+   -------------------------------------------------------------------------- */
+.tool-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.tool-info-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  min-width: 0;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+.tool-info-card:hover { border-color: var(--text-tertiary); }
+.info-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+  letter-spacing: .02em;
+}
+.info-value {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: 500;
+  line-height: 1.5;
+  /* Long tag lists and hostnames wrap instead of overflowing the card. */
+  overflow-wrap: anywhere;
+}
+.info-value a { transition: color var(--transition-fast); }
+.info-value a:hover { text-decoration: underline !important; }
+
+@media (max-width: 900px) {
+  .tool-info-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .tool-info-grid { grid-template-columns: 1fr; gap: 8px; }
+  .tool-info-card { padding: 12px 14px; }
+}
 /* Detail header — two rows:
      row 1: [avatar] [name + badges]     (vertically centred together)
      row 2: meta row spanning full width, starting at the avatar's edge
