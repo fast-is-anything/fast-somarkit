@@ -34,12 +34,22 @@
   applyTheme(document.documentElement.getAttribute('data-theme') || 'light');
 
   /* ----------------------------------------------------- language switcher */
-  var L = { expand: '展开侧边栏', collapse: '折叠侧边栏', home: 'SoMarkIt 首页' };
-  try {
-    if (document.documentElement.getAttribute('data-lang') === 'en') {
-      L = { expand: 'Expand sidebar', collapse: 'Collapse sidebar', home: 'SoMarkIt home' };
-    }
-  } catch (e) {}
+  // Per-language strings for the shell controls. Keyed by the code in
+  // <html data-lang>, which the server sets from LANGS in src/lib/i18n.js.
+  var LANG_STRINGS = {
+    zh: { expand: '展开侧边栏', collapse: '折叠侧边栏', home: 'SoMarkIt 首页' },
+    en: { expand: 'Expand sidebar', collapse: 'Collapse sidebar', home: 'SoMarkIt home' },
+    ja: { expand: 'サイドバーを開く', collapse: 'サイドバーを閉じる', home: 'SoMarkIt ホーム' },
+    ko: { expand: '사이드바 펼치기', collapse: '사이드바 접기', home: 'SoMarkIt 홈' },
+  };
+  function currentLang() {
+    try { return document.documentElement.getAttribute('data-lang') || 'zh'; } catch (e) { return 'zh'; }
+  }
+  var L = LANG_STRINGS[currentLang()] || LANG_STRINGS.zh;
+
+  // Locale prefix used by every internal URL (/zh, /en, /ja, /ko — keep in
+  // sync with LANGS in src/lib/i18n.js).
+  var LOCALE_RE = /^\/(zh|en|ja|ko)(?=\/|$)/;
 
   function closeLangMenus() {
     var open = document.querySelectorAll('.lang-switcher.open');
@@ -75,22 +85,33 @@
 
   /* ------------------------------------------------------- sidebar collapse */
   // Count-label formatters, kept in sync with src/lib/i18n.js.
-  var T = {
-    toolsCount: function (n) { return '共 ' + n + ' 个工具'; },
-    filtered: function (n) { return '筛选出 ' + n + ' 个工具'; },
-    total: function (n) { return '共 ' + n + ' 个'; },
-    matched: function (n, all) { return '匹配 ' + n + ' / ' + all + ' 个'; },
+  var COUNT_STRINGS = {
+    zh: {
+      toolsCount: function (n) { return '共 ' + n + ' 个工具'; },
+      filtered: function (n) { return '筛选出 ' + n + ' 个工具'; },
+      total: function (n) { return '共 ' + n + ' 个'; },
+      matched: function (n, all) { return '匹配 ' + n + ' / ' + all + ' 个'; },
+    },
+    en: {
+      toolsCount: function (n) { return n + ' tools'; },
+      filtered: function (n) { return n + ' tools matched'; },
+      total: function (n) { return n + ' total'; },
+      matched: function (n, all) { return n + ' of ' + all; },
+    },
+    ja: {
+      toolsCount: function (n) { return '全 ' + n + ' 件のツール'; },
+      filtered: function (n) { return n + ' 件が一致'; },
+      total: function (n) { return '全 ' + n + ' 件'; },
+      matched: function (n, all) { return n + ' / ' + all + ' 件'; },
+    },
+    ko: {
+      toolsCount: function (n) { return '총 ' + n + '개 도구'; },
+      filtered: function (n) { return n + '개 도구가 일치'; },
+      total: function (n) { return '총 ' + n + '개'; },
+      matched: function (n, all) { return n + ' / ' + all + '개'; },
+    },
   };
-  try {
-    if (document.documentElement.getAttribute('data-lang') === 'en') {
-      T = {
-        toolsCount: function (n) { return n + ' tools'; },
-        filtered: function (n) { return n + ' tools matched'; },
-        total: function (n) { return n + ' total'; },
-        matched: function (n, all) { return n + ' of ' + all; },
-      };
-    }
-  } catch (e) {}
+  var T = COUNT_STRINGS[currentLang()] || COUNT_STRINGS.zh;
   function setCollapsed(v) {
     document.body.classList.toggle('sidebar-collapsed', v);
     try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch (e) {}
@@ -297,7 +318,7 @@
     if (catEl && catEl.classList.contains('category-item')) {
       var cat = catEl.getAttribute('data-category');
       // Keep the current locale prefix so the address bar stays in-language.
-      var langPrefix = (location.pathname.match(/^\/(zh|en)(?=\/|$)/) || [''])[0];
+      var langPrefix = (location.pathname.match(LOCALE_RE) || [''])[0];
       var target = cat === 'all' ? (langPrefix || '/') : langPrefix + '/' + encodeURIComponent(cat);
 
       // Every listing page ships the full catalogue, so switching category is
@@ -427,7 +448,7 @@
   window.addEventListener('popstate', function () {
     if (!container) return;
     var slug = location.pathname
-      .replace(/^\/(zh|en)(?=\/|$)/, '')   // drop the locale prefix
+      .replace(LOCALE_RE, '')   // drop the locale prefix
       .replace(/^\/+|\/+$/g, '') || 'all';
     if (slug === 'all') state.category = 'all';
     else if (document.getElementById('cat-' + slug)) state.category = slug;
@@ -528,7 +549,7 @@
     var sections = document.querySelectorAll('.category-section[data-has-more="1"]');
     if (!sections.length || !('IntersectionObserver' in window)) return;
 
-    var localeMatch = location.pathname.match(/^\/(zh|en)(?=\/|$)/);
+    var localeMatch = location.pathname.match(LOCALE_RE);
     var locale = localeMatch ? localeMatch[1] : 'zh';
     var RAIL_API = '/' + locale + '/api/rail';
 
@@ -564,13 +585,28 @@
       for (var i = 0; i < entries.length; i++) {
         if (!entries[i].isIntersecting) continue;
         var sec = entries[i].target.closest('.category-section');
-        if (sec) loadMore(sec);
+        // Only extend a rail the reader can actually see. Without this an
+        // off-screen section still loads, because the observer reports
+        // intersection for the sentinel of every rail on first paint.
+        if (sec && sec.getAttribute('data-has-more') === '1' && isSectionVisible(sec)) {
+          loadMore(sec);
+        }
       }
     }, {
-      // Start fetching well before the sentinel is visible so the appended
-      // cards are already there when the user arrives.
-      rootMargin: '600px 0px',
+      // Prefetch a little before the sentinel reaches the viewport so the next
+      // page is already there on arrival — but not so far that rails far below
+      // the fold load on page load.
+      rootMargin: '200px 0px',
     });
+
+    /** True when the section itself is within (or near) the viewport. */
+    function isSectionVisible(sec) {
+      var r = sec.getBoundingClientRect();
+      var vh = window.innerHeight || document.documentElement.clientHeight;
+      var vw = window.innerWidth || document.documentElement.clientWidth;
+      // 200px of slack matches the rootMargin above.
+      return r.bottom >= -200 && r.top <= vh + 200 && r.right > 0 && r.left < vw;
+    }
 
     var sentinels = document.querySelectorAll('[data-rail-sentinel]');
     for (var i = 0; i < sentinels.length; i++) io.observe(sentinels[i]);

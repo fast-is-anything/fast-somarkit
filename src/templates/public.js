@@ -19,6 +19,24 @@ function brandMark() {
   return `<span class="brand-mark" aria-hidden="true">${logoGlyph(22)}</span>`;
 }
 
+/** The LANGS entry for a language code (normalised, never undefined). */
+function langMeta(lang) {
+  return LANGS.find((l) => l.code === normalizeLang(lang)) || LANGS[0];
+}
+
+/**
+ * Display name of a category.
+ *
+ * `localizeCategory` has already resolved `name` to the requested language,
+ * falling back to Chinese when a translation is blank — so the stored value is
+ * used as-is. (`c.name_<code>` is only consulted for rows that skipped
+ * localisation.)
+ */
+function categoryLabel(c, lang) {
+  const code = normalizeLang(lang);
+  return c[`name_${code}`] || c.name || '';
+}
+
 /**
  * rel attribute for a tool's outbound links.
  *
@@ -102,11 +120,12 @@ function hreflangLinks(canonical, lang) {
   return links.join('\n');
 }
 
-function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [], theme = 'light', lang = 'zh', gaId = '', noindex = false }) {
-  const htmlLang = normalizeLang(lang) === 'en' ? 'en' : 'zh-CN';
-  const ogLocale = normalizeLang(lang) === 'en' ? 'en_US' : 'zh_CN';
+function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [], theme = 'light', lang = DEFAULT_LANG, gaId = '', noindex = false }) {
+  // <html lang>/og:locale come from the LANGS entry, so a new locale is
+  // announced correctly without touching this template.
+  const meta = langMeta(lang);
   return `<!DOCTYPE html>
-<html lang="${htmlLang}" data-lang="${esc(normalizeLang(lang))}" data-theme="${theme}">
+<html lang="${esc(meta.htmlLang)}" data-lang="${esc(meta.code)}" data-theme="${theme}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -129,7 +148,7 @@ ${hreflangLinks(canonical, lang)}
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:image" content="https://somarkit.com/og-cover.svg">
-<meta property="og:locale" content="${ogLocale}">
+<meta property="og:locale" content="${esc(meta.ogLocale)}">
 ${canonical ? `<meta property="og:url" content="${esc(canonical)}">` : ''}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(title)}">
@@ -152,11 +171,16 @@ gtag('config', ${JSON.stringify(gaId)}, { send_page_view: true });
 </head>`;
 }
 
-function sidebar({ categories, counts, activeSlug = 'all', total, lang = 'zh', basePath = '/' }) {
+function sidebar({ categories, counts, activeSlug = 'all', total, lang = DEFAULT_LANG, basePath = '/' }) {
   // Real links (not JS-only buttons) so each category page is addressable,
   // shareable and crawlable in whichever locale the URL names.
+  //
+  // data-category is what the click handler reads to decide whether the
+  // switch can happen client-side; without it the anchor degrades to a plain
+  // navigation and the "highlight the rail, then show the loader" sequence
+  // never runs.
   const items = [
-    `<a class="category-item ${activeSlug === 'all' ? 'active' : ''}" href="${esc(localePath(lang, '/'))}" title="${esc(t(lang, 'nav.allTools'))}">
+    `<a class="category-item ${activeSlug === 'all' ? 'active' : ''}" data-category="all" href="${esc(localePath(lang, '/'))}" title="${esc(t(lang, 'nav.allTools'))}">
       <span class="cat-icon">${ICONS.globe}</span>
       <span class="cat-name">${esc(t(lang, 'nav.allTools'))}</span>
       <span class="cat-count-badge">${total}</span>
@@ -165,7 +189,7 @@ function sidebar({ categories, counts, activeSlug = 'all', total, lang = 'zh', b
   for (const c of categories) {
     const label = categoryLabel(c, lang);
     items.push(
-      `<a class="category-item ${activeSlug === c.slug ? 'active' : ''}" href="${esc(localePath(lang, `/${c.slug}`))}" title="${esc(label)}">
+      `<a class="category-item ${activeSlug === c.slug ? 'active' : ''}" data-category="${esc(c.slug)}" href="${esc(localePath(lang, `/${c.slug}`))}" title="${esc(label)}">
         <span class="cat-icon">${icon(c.icon)}</span>
         <span class="cat-name">${esc(label)}</span>
         <span class="cat-count-badge">${counts[c.id] || 0}</span>
@@ -190,13 +214,7 @@ function sidebar({ categories, counts, activeSlug = 'all', total, lang = 'zh', b
   <div class="sidebar-overlay" id="sidebarOverlay"></div>`;
 }
 
-/** Category display name, honouring the stored English name when present. */
-function categoryLabel(c, lang) {
-  if (normalizeLang(lang) === 'en' && c.name_en) return c.name_en;
-  return c.name;
-}
-
-function mobileHeader(lang = 'zh', basePath = '/') {
+function mobileHeader(lang = DEFAULT_LANG, basePath = '/') {
   return `<nav class="mobile-header" aria-label="${esc(t(lang, 'nav.categories'))}">
     <a href="${esc(localePath(lang, '/'))}" class="nav-brand">
       ${brandMark()}<span class="brand-text">SoMarkIt</span>
@@ -213,7 +231,7 @@ function mobileHeader(lang = 'zh', basePath = '/') {
   </nav>`;
 }
 
-function topbar({ categories, activeSlug = 'all', lang = 'zh', basePath = '/' }) {
+function topbar({ categories, activeSlug = 'all', lang = DEFAULT_LANG, basePath = '/' }) {
   return `<div class="topbar" id="navbar">
     <div class="topbar-inner">
       <div class="topbar-search" role="search">
@@ -237,7 +255,7 @@ function topbar({ categories, activeSlug = 'all', lang = 'zh', basePath = '/' })
   </div>`;
 }
 
-function hero({ total, catCount, featured, lang = 'zh' }) {
+function hero({ total, catCount, featured, lang = DEFAULT_LANG }) {
   let rail = '';
   if (featured.length) {
     // Two rich colour cards on top, matching the reference density.
@@ -369,7 +387,7 @@ function logoBox(tool, cls) {
   return `<span class="logo-tile ${cls}" role="img" aria-label="${label}"><span class="logo-text" aria-hidden="true">${esc(initials(tool.name))}</span></span>`;
 }
 
-export function toolCard(item, lang = 'zh') {
+export function toolCard(item, lang = DEFAULT_LANG) {
   const tags = item.tags.slice(0, 4).map((tag) => `<span class="tool-tag">${esc(tag)}</span>`).join('');
   const haystack = [item.name, item.description, item.tags.join(' '), item.category_name, hostOf(item.url)]
     .filter(Boolean).join(' ').toLowerCase();
@@ -409,7 +427,7 @@ export function toolCard(item, lang = 'zh') {
  * click can be handled client-side, on every page — no round-trip, no flash of
  * a loading screen after the first visit to a category page.
  */
-function contentArea({ groups, categories, total, activeSlug = 'all', lang = 'zh', mode = 'subset', initialVisibleCount = null }) {
+function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEFAULT_LANG, mode = 'subset', initialVisibleCount = null }) {
   // On a category page only the matching section starts visible; the rest are
   // hidden up front so the server-rendered HTML already looks correct (no
   // flash of other categories before JS runs). Keyed off initialVisibleCount
@@ -471,7 +489,7 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = 'zh
   </div>`;
 }
 
-function footer(year, lang = 'zh', basePath = '/') {
+function footer(year, lang = DEFAULT_LANG, basePath = '/') {
   return `<footer class="site-footer">
     <div class="site-footer-inner">
       <div>© ${year} SoMarkIt · ${esc(t(lang, 'footer.tagline'))}</div>
@@ -485,7 +503,7 @@ function footer(year, lang = 'zh', basePath = '/') {
   </footer>`;
 }
 
-function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false, mode = 'subset', initialVisibleCount = null }) {
+function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false, mode = 'subset', initialVisibleCount = null }) {
   return `${head({ title, description, canonical, jsonLd, theme, lang, gaId, noindex: unprefixed })}
 <body>
 <noscript><div style="text-align:center;padding:1rem;background:#FEF2F2;color:#991B1B">本站需要启用 JavaScript 才能使用搜索与筛选功能。</div></noscript>
@@ -545,7 +563,7 @@ function groupByCategory(categories, tools, perGroup = 0) {
 
 // --- pages ------------------------------------------------------------------
 
-export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
+export function homePage({ categories, counts, tools, featured, total, catCount, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
   // Each rail shows the first RAIL_PAGE_SIZE tools; the rest stream in on
   // scroll via /api/rail, and "View all" jumps to the full category page.
   const groups = groupByCategory(categories, tools, RAIL_PAGE_SIZE);
@@ -558,7 +576,7 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
       alternateName: ['AI 工具导航', 'AI Tools Directory'],
       url: 'https://somarkit.com/',
       description: siteDesc,
-      inLanguage: normalizeLang(lang) === 'en' ? 'en' : 'zh-CN',
+      inLanguage: langMeta(lang).htmlLang,
       potentialAction: {
         '@type': 'SearchAction',
         target: { '@type': 'EntryPoint', urlTemplate: 'https://somarkit.com/?q={search_term_string}' },
@@ -603,7 +621,7 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
   );
 }
 
-export function toolPage({ tool, categories, counts, related, total, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
+export function toolPage({ tool, categories, counts, related, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
   const siteDesc = t(lang, 'seo.siteDesc');
   const catName = tool.category_name || t(lang, 'detail.uncategorized');
   const jsonLd = [
@@ -724,7 +742,7 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
+export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
   // Ship every category (not just this one) so switching to another category
   // can be handled client-side, exactly like on the home page.
   const groups = groupByCategory(categories, allTools || tools);
@@ -755,10 +773,11 @@ export function categoryPage({ category, categories, counts, tools, allTools, fe
   );
 }
 
-export function aboutPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
-  const isEn = normalizeLang(lang) === 'en';
+export function aboutPage({ categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
+  // Body copy lives in the dictionaries (about.*) so every locale is translated
+  // by the same table rather than by an if/else in this template.
   const body = `${head({
-    title: isEn ? 'About SoMarkIt — AI Tool Directory' : '关于 SoMarkIt — AI 工具导航',
+    title: t(lang, 'about.title'),
     description: t(lang, 'seo.siteDesc'),
     canonical: `https://somarkit.com${localePath(lang, '/about')}` ,
     jsonLd: [],
@@ -774,29 +793,18 @@ export function aboutPage({ categories, counts, total, theme, lang = 'zh', gaId 
     ${topbar({ categories, lang, basePath })}
     <main id="main-content" class="detail-wrap">
       <div class="detail-card">
-        <h1 class="detail-title">${isEn ? 'About SoMarkIt' : '关于 SoMarkIt'}</h1>
+        <h1 class="detail-title">${esc(t(lang, 'about.h1'))}</h1>
         <div class="detail-body">
-          ${isEn
-            ? `<p>SoMarkIt is a hand-curated AI tool directory. We do not aim to list the most tools — every entry is checked in practice and comes with a clear positioning note.</p>
-               <p>The site runs on Cloudflare Workers + D1, and content is maintained through a built-in admin console with instant publishing.</p>
-               <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">What we list</h2>
-               <ul style="padding-left:20px">
-                 <li>Publicly accessible AI products and services with clear value</li>
-                 <li>Chat assistants, agents, coding, productivity, image, video, audio, design, research, models and platforms</li>
-                 <li>Each record includes pricing model, core tags and a one-line positioning</li>
-               </ul>
-               <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">Submissions</h2>
-               <p>To submit or correct an entry, please contact the site owner through the admin console.</p>`
-            : `<p>SoMarkIt 是一个由站长人工筛选 + 持续维护的 AI 工具导航站。我们不追求收录最多，而是希望每个被收录的工具都经过实际验证，并配上清楚的定位说明。</p>
-               <p>站点运行在 Cloudflare Workers + D1 之上，内容通过自带的管理后台维护，收录与更新实时生效。</p>
-               <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">我们收录什么</h2>
-               <ul style="padding-left:20px">
-                 <li>可公开访问、有明确价值的 AI 产品与服务</li>
-                 <li>覆盖对话、智能体、编程、办公、图像、视频、音频、设计、研究、行业、大模型、开发平台等门类</li>
-                 <li>每条记录包含定价模式、核心标签与一句话定位</li>
-               </ul>
-               <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">收录提交</h2>
-               <p>如需提交或纠正收录信息，请通过站点管理后台联系站长。</p>`}
+          <p>${esc(t(lang, 'about.p1'))}</p>
+          <p>${esc(t(lang, 'about.p2'))}</p>
+          <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">${esc(t(lang, 'about.h2What'))}</h2>
+          <ul style="padding-left:20px">
+            <li>${esc(t(lang, 'about.li1'))}</li>
+            <li>${esc(t(lang, 'about.li2'))}</li>
+            <li>${esc(t(lang, 'about.li3'))}</li>
+          </ul>
+          <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">${esc(t(lang, 'about.h2Submit'))}</h2>
+          <p>${esc(t(lang, 'about.submitNote'))}</p>
         </div>
       </div>
     </main>
@@ -809,19 +817,18 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function notFoundPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
-  const isEn = normalizeLang(lang) === 'en';
+export function notFoundPage({ categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
   return new Response(
-    `${head({ title: isEn ? 'Page not found | SoMarkIt' : '页面不存在 | SoMarkIt', description: t(lang, 'seo.siteDesc'), theme, lang, gaId })}
+    `${head({ title: t(lang, 'notFound.title'), description: t(lang, 'seo.siteDesc'), theme, lang, gaId })}
 <body>
 <div class="app-layout">
   ${sidebar({ categories, counts, activeSlug: 'all', total, lang, basePath })}
   <div class="main-wrapper">${mobileHeader(lang, basePath)}${topbar({ categories, lang, basePath })}
     <main id="main-content" class="detail-wrap" style="text-align:center;padding-top:120px">
       <div style="font-size:72px;font-weight:800;letter-spacing:-.04em;color:var(--text-tertiary)">404</div>
-      <h1 class="detail-title" style="margin-top:8px">${isEn ? 'This tool has not been marked yet' : '这个工具还没有被标记'}</h1>
-      <p style="color:var(--text-tertiary);margin-bottom:24px">${isEn ? 'The page does not exist, or the tool has been removed.' : '页面不存在，或者工具已被移除。'}</p>
-      <a href="${esc(localePath(lang, '/'))}" class="nav-btn nav-btn-primary" style="height:40px;padding:0 18px">${isEn ? 'Back to home' : '返回首页'}</a>
+      <h1 class="detail-title" style="margin-top:8px">${esc(t(lang, 'notFound.h1'))}</h1>
+      <p style="color:var(--text-tertiary);margin-bottom:24px">${esc(t(lang, 'notFound.body'))}</p>
+      <a href="${esc(localePath(lang, '/'))}" class="nav-btn nav-btn-primary" style="height:40px;padding:0 18px">${esc(t(lang, 'notFound.back'))}</a>
     </main>
     ${footer(new Date().getFullYear(), lang, basePath)}
   </div>
@@ -835,8 +842,7 @@ ${pageLoader()}
 
 // --- submit a tool ----------------------------------------------------------
 
-export function submitPage({ categories, counts, total, theme, lang = 'zh', gaId = '', error = '', values = {}, basePath = '/' }) {
-  const isEn = normalizeLang(lang) === 'en';
+export function submitPage({ categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', error = '', values = {}, basePath = '/' }) {
   const v = values || {};
 
   const catOpts = categories
@@ -952,7 +958,7 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function submitSuccessPage({ categories, counts, total, theme, lang = 'zh', gaId = '', basePath = '/', unprefixed = false }) {
+export function submitSuccessPage({ categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
   const body = `${head({
     title: `${t(lang, 'submit.successTitle')} — SoMarkIt`,
     description: t(lang, 'submit.successBody'),
