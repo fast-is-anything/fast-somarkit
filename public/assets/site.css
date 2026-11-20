@@ -1883,6 +1883,15 @@ select.form-input:focus { background-color: var(--bg-primary); }
 }
 .search-page.step { padding: 0 14px; }
 .search-page.disabled { opacity: .45; pointer-events: none; }
+/* The clicked page while the next document loads: the full-screen loader also
+   appears, this just tells the user which page they asked for. */
+.search-page.is-pending {
+  background: var(--bg-tertiary);
+  border-color: var(--text-tertiary);
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: progress;
+}
 
 /* Results page heading */
 .search-head { margin-bottom: 20px; }

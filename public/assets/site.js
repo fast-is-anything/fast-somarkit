@@ -292,6 +292,26 @@
     var t = e.target;
     if (!t.closest) return;
 
+    /* Search-result pagination is a full document load. Without this the page
+       just sat there after a click until the next one arrived. */
+    var pageLink = t.closest('a.search-page');
+    if (pageLink) {
+      if (pageLink.classList.contains('cur') || pageLink.classList.contains('disabled')) {
+        e.preventDefault();
+        return;
+      }
+      // Leave modified clicks alone so "open in new tab" still works.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      pageLink.classList.add('is-pending');
+      setContentLoading(true);
+      var target = pageLink.getAttribute('href');
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { window.location.href = target; });
+      });
+      return;
+    }
+
     var catEl = t.closest('[data-category]:not(.tool-card):not(.category-section)');
     if (catEl && catEl.classList.contains('category-item')) {
       var cat = catEl.getAttribute('data-category');
@@ -878,6 +898,9 @@
      the "review" button still in its loading state. Put every such button back
      so the restored page looks normal. */
   window.addEventListener('pageshow', function (e) {
+    // The full-screen loader is a body class, so it survives a bfcache restore
+    // unless it is cleared here — otherwise going Back leaves the page covered.
+    setContentLoading(false);
     if (!e.persisted) return;
     var links = document.querySelectorAll('a.tool-detail-link[data-busy="1"]');
     for (var i = 0; i < links.length; i++) {
@@ -888,5 +911,7 @@
       a.style.width = '';
       a.textContent = a.getAttribute('data-label-resting') || a.textContent;
     }
+    var pager = document.querySelectorAll('a.search-page.is-pending');
+    for (var j = 0; j < pager.length; j++) pager[j].classList.remove('is-pending');
   });
 })();
