@@ -1356,8 +1356,75 @@ export function fmtTime(s) {
 // --- submissions (admin) ----------------------------------------------------
 
 export function submissionsPage({ user, env, submissions, total, page, perPage, pages, status, counts, flash }) {
+  /* Detail content for the popup. Rendered once per row into an inert
+     <template>, then cloned into a single shared <dialog> when "详情" is
+     clicked — so the markup is server-rendered (no client-side escaping) while
+     the page keeps only one modal. */
+  const detailBody = (s) => {
+    const who = [s.submitter_name, s.submitter_email].filter(Boolean).join(' · ') || '匿名';
+    return `
+      <div class="sub-detail-head">
+        <div>
+          <div class="sub-detail-name">${esc(s.name)}</div>
+          <a class="sub-detail-url" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(s.url)}</a>
+        </div>
+        ${submissionPill(s.status)}
+      </div>
+      <div class="sub-detail-grid">
+        <div><div class="ad-label">分类</div><div>${esc(s.category_name || '—')}</div></div>
+        <div><div class="ad-label">定价</div>${pillTool(s.pricing)}</div>
+        <div><div class="ad-label">提交人</div><div>${esc(who)}</div></div>
+        <div><div class="ad-label">提交时间</div><div>${esc(fmtTime(s.created_at))}</div></div>
+      </div>
+      <div class="sub-detail-block">
+        <div class="ad-label">简介</div>
+        <div class="sub-detail-text">${esc(s.description || '—')}</div>
+      </div>
+      <div class="sub-detail-block">
+        <div class="ad-label">标签</div>
+        <div class="sub-detail-text">${esc(s.tags || '—')}</div>
+      </div>
+      ${s.note ? `<div class="sub-detail-block">
+        <div class="ad-label">提交人补充</div>
+        <div class="sub-detail-text" style="white-space:pre-wrap">${esc(s.note)}</div>
+      </div>` : ''}
+      ${s.review_note ? `<div class="sub-detail-block">
+        <div class="ad-label">审核备注</div>
+        <div class="sub-detail-text" style="white-space:pre-wrap">${esc(s.review_note)}</div>
+      </div>` : ''}
+    `;
+  };
+
+  /* Buttons shown inside the popup, mirroring the row actions. */
+  const detailActions = (s) => {
+    if (s.status === 'pending') {
+      return `<form method="post" action="/admin/submissions/${s.id}/approve">
+          <button class="ad-btn ad-btn-primary" type="submit">${UI.check}收录</button>
+        </form>
+        <form method="post" action="/admin/submissions/${s.id}/reject" data-confirm="拒绝「${esc(s.name)}」的提交？">
+          <button class="ad-btn ad-btn-danger" type="submit">拒绝</button>
+        </form>`;
+    }
+    if (s.status === 'approved') {
+      return `${s.tool_slug ? `<a class="ad-btn" href="/tools/${esc(s.tool_slug)}" target="_blank" rel="noopener">${UI.externalLink}查看工具</a>` : ''}
+        <form method="post" action="/admin/submissions/${s.id}/delete" data-confirm="删除这条提交记录？（不会删除已收录的工具）">
+          <button class="ad-btn ad-btn-danger" type="submit">${UI.trash}删除记录</button>
+        </form>`;
+    }
+    return `<form method="post" action="/admin/submissions/${s.id}/approve">
+        <button class="ad-btn ad-btn-primary" type="submit">改为收录</button>
+      </form>
+      <form method="post" action="/admin/submissions/${s.id}/delete" data-confirm="删除这条提交记录？">
+        <button class="ad-btn ad-btn-danger" type="submit">${UI.trash}删除记录</button>
+      </form>`;
+  };
+
   const rows = submissions.map((s) => {
     const who = s.submitter_email || s.submitter_name || '匿名';
+    // "详情" opens the popup; the inline buttons stay for one-click handling.
+    const openBtn = `<button class="ad-btn ad-btn-sm" type="button" data-sub-open="${s.id}"
+      title="查看提交详情">${UI.search}详情</button>`;
+
     const actions = s.status === 'pending'
       ? `<form method="post" action="/admin/submissions/${s.id}/approve" style="display:inline">
            <button class="ad-btn ad-btn-sm ad-btn-primary" type="submit" title="通过并收录">${UI.check}收录</button>
@@ -1392,9 +1459,15 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
         <div class="ad-cell-sub">${esc(fmtTime(s.created_at))}</div>
       </td>
       <td data-label="状态">${submissionPill(s.status)}</td>
-      <td class="ad-cell-actions-cell"><div class="ad-cell-actions">${actions}</div></td>
+      <td class="ad-cell-actions-cell"><div class="ad-cell-actions">${openBtn}${actions}</div></td>
     </tr>`;
   }).join('');
+
+  // Popup payloads live outside the table: keeping <template> out of <tbody>
+  // avoids any chance of the parser relocating them.
+  const detailTemplates = submissions
+    .map((s) => `<template data-sub-body="${s.id}">${detailBody(s)}<div class="sub-detail-actions">${detailActions(s)}</div></template>`)
+    .join('');
 
   const tabs = [
     ['', '全部', counts.pending + counts.approved + counts.rejected],
@@ -1418,7 +1491,7 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
         </div>
       </div>
       <div class="ad-table-wrap" data-fixed-table>
-        <table class="ad-table">
+        <table class="ad-table ad-table-wide-actions">
           <thead><tr>
             <th>工具</th><th>分类</th><th>定价</th><th>提交人</th><th>状态</th><th></th>
           </tr></thead>
@@ -1433,6 +1506,54 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
         basePath: listHref('/admin/submissions', { status }),
       })}
     </div>
+
+    ${detailTemplates}
+
+    <!-- One shared popup; each row contributes its own <template> body. -->
+    <dialog class="ad-dialog" id="subDialog" aria-labelledby="subDialogTitle">
+      <div class="ad-dialog-head">
+        <h2 id="subDialogTitle">提交详情</h2>
+        <span class="spacer"></span>
+        <button class="ad-btn ad-btn-sm ad-btn-ghost" type="button" data-sub-close
+          aria-label="关闭">${UI.close}</button>
+      </div>
+      <div class="ad-dialog-body" id="subDialogBody"></div>
+    </dialog>
+
+    <script>
+      (function(){
+        var dlg = document.getElementById('subDialog');
+        var body = document.getElementById('subDialogBody');
+        if (!dlg || !body || typeof dlg.showModal !== 'function') return;
+
+        function close() { if (dlg.open) dlg.close(); }
+
+        document.addEventListener('click', function (e) {
+          var t = e.target;
+          if (!t.closest) return;
+
+          var openBtn = t.closest('[data-sub-open]');
+          if (openBtn) {
+            e.preventDefault();
+            var id = openBtn.getAttribute('data-sub-open');
+            var tpl = document.querySelector('template[data-sub-body="' + id + '"]');
+            if (!tpl) return;
+            body.replaceChildren(tpl.content.cloneNode(true));
+            dlg.showModal();
+            return;
+          }
+
+          if (t.closest('[data-sub-close]')) { close(); return; }
+          // Clicking the backdrop closes: a click lands on the dialog element
+          // itself only when it is outside the inner content box.
+          if (t === dlg) close();
+        });
+
+        // A form inside the popup navigates; just make sure it is closed if the
+        // browser restores the page from the bfcache with it still open.
+        window.addEventListener('pageshow', function (e) { if (e.persisted) close(); });
+      })();
+    </script>
   `;
 
   return adminLayout({
