@@ -74,6 +74,24 @@ CREATE TABLE IF NOT EXISTS tools (
   review_md_en    TEXT    DEFAULT '',
   review_md_ja    TEXT    DEFAULT '',
   review_md_ko    TEXT    DEFAULT '',
+  -- Optional overrides for the page's <title> and meta description. Empty means
+  -- "build it from the SEO template", which is what the admin form shows as the
+  -- placeholder. One column per locale, bare column = Chinese; a missing
+  -- translation falls back to that locale's template, not to the Chinese text.
+  seo_title       TEXT    DEFAULT '',
+  seo_title_en    TEXT    DEFAULT '',
+  seo_title_ja    TEXT    DEFAULT '',
+  seo_title_ko    TEXT    DEFAULT '',
+  seo_desc        TEXT    DEFAULT '',
+  seo_desc_en     TEXT    DEFAULT '',
+  seo_desc_ja     TEXT    DEFAULT '',
+  seo_desc_ko     TEXT    DEFAULT '',
+  -- <meta name="keywords"> override (comma separated). Google ignores this tag;
+  -- kept so every head field has one place to live.
+  seo_keywords    TEXT    DEFAULT '',
+  seo_keywords_en TEXT    DEFAULT '',
+  seo_keywords_ja TEXT    DEFAULT '',
+  seo_keywords_ko TEXT    DEFAULT '',
   source          TEXT    DEFAULT '',      -- provenance for imports
   created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))

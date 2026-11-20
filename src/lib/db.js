@@ -13,7 +13,7 @@ import { LANGS } from './i18n.js';
  * the locale list — adding a language only needs the migration that creates the
  * columns.
  */
-const TOOL_I18N_FIELDS = ['name', 'description', 'tags', 'review_md'];
+const TOOL_I18N_FIELDS = ['name', 'description', 'tags', 'review_md', 'seo_title', 'seo_desc', 'seo_keywords'];
 
 /** Column names for every locale after the first, in LANGS order. */
 const TOOL_I18N_COLUMNS = LANGS.slice(1).flatMap((l) =>
@@ -361,7 +361,7 @@ export async function createTool(db, data) {
     'slug', 'name', 'url', 'description', 'category_id', 'tags', 'pricing', 'logo_url',
     'is_hot', 'is_new', 'is_featured', 'nofollow', 'noindex', 'in_sitemap',
     'status', 'sort_order',
-    'review_md', 'source', 'updated_at',
+    'review_md', 'seo_title', 'seo_desc', 'seo_keywords', 'source', 'updated_at',
   ];
   const cols = [...baseCols, ...TOOL_I18N_COLUMNS];
 
@@ -383,6 +383,9 @@ export async function createTool(db, data) {
     data.status || 'published',
     Number(data.sort_order) || 0,
     data.review_md || '',
+    data.seo_title || '',
+    data.seo_desc || '',
+    data.seo_keywords || '',
     data.source || '',
     now(),
   ];
@@ -405,6 +408,7 @@ export async function updateTool(db, id, data) {
     'nofollow=?', 'noindex=?', 'in_sitemap=?', 'status=?',
     'sort_order=?',
     'review_md=?',
+    'seo_title=?', 'seo_desc=?', 'seo_keywords=?',
     ...TOOL_I18N_COLUMNS.map((c) => `${c}=?`),
     'updated_at=?',
   ];
@@ -427,6 +431,9 @@ export async function updateTool(db, id, data) {
     data.status || 'published',
     Number(data.sort_order) || 0,
     data.review_md || '',
+    data.seo_title || '',
+    data.seo_desc || '',
+    data.seo_keywords || '',
   ];
   const i18nBinds = TOOL_I18N_COLUMNS.map((col) => data[col] || '');
 

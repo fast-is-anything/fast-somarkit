@@ -560,6 +560,69 @@ export function toolFormPage({ user, env, nav = {}, tool, categories, flash, isN
 
           <div class="ad-card">
             <div class="ad-card-head">
+              <h2>SEO 标题、描述与关键词</h2><span class="spacer"></span>
+              <span class="an-note">留空则按模板自动生成</span>
+            </div>
+            <div class="ad-card-body">
+              <!-- Per-language overrides for the page's <title> and meta
+                   description. Empty (the default) keeps the generated copy, so
+                   nothing has to be filled in for a new tool. A language tab
+                   strip of its own, but the script keeps every strip in sync. -->
+              <div class="ad-lang-tabs" role="tablist" aria-label="SEO 字段语言">
+                ${LANGS.map((l, i) => `<button class="ad-lang-tab ${i === 0 ? 'is-active' : ''}" type="button"
+                  role="tab" data-form-lang="${esc(l.code)}"
+                  aria-selected="${i === 0 ? 'true' : 'false'}">
+                  ${esc(l.short)}<span class="ad-lang-tab-label">${esc(l.label)}</span>
+                  <span class="ad-lang-dot" data-lang-dot="${esc(l.code)}" hidden title="已填写"></span>
+                </button>`).join('')}
+              </div>
+
+              <div class="ad-field">
+                <label for="seo_title">标题</label>
+                ${LANGS.map((l, i) => `<div data-lang-field="${esc(l.code)}" ${i === 0 ? '' : 'hidden'}>
+                  <input class="ad-input" id="${i === 0 ? 'seo_title' : `seo_title_${l.code}`}"
+                    name="${i === 0 ? 'seo_title' : `seo_title_${l.code}`}" maxlength="90"
+                    data-seo-title="${esc(l.code)}"
+                    value="${esc(i === 0 ? (t.seo_title || '') : (t[`seo_title_${l.code}`] || ''))}"
+                    placeholder="${esc(i === 0
+                      ? `${t.name || '工具名'} 评测：功能、价格与替代方案`
+                      : `${l.label} 标题（选填）`)}">
+                  <div class="ad-hint" data-seo-width="${esc(l.code)}"></div>
+                </div>`).join('')}
+                <div class="ad-hint">填写后会原样用作 <code>&lt;title&gt;</code>，不再追加「| SoMarkIt」。建议中文 ≤ 30 字、英文 ≤ 60 字符，留空自动生成。</div>
+              </div>
+
+              <div class="ad-field">
+                <label for="seo_desc">搜索描述</label>
+                ${LANGS.map((l, i) => `<div data-lang-field="${esc(l.code)}" ${i === 0 ? '' : 'hidden'}>
+                  <textarea class="ad-textarea" id="${i === 0 ? 'seo_desc' : `seo_desc_${l.code}`}"
+                    name="${i === 0 ? 'seo_desc' : `seo_desc_${l.code}`}" maxlength="320" rows="3"
+                    placeholder="${esc(i === 0
+                      ? '留空则用「简介 + 一句固定后缀」自动生成'
+                      : `${l.label} 描述（选填）`)}">${esc(i === 0 ? (t.seo_desc || '') : (t[`seo_desc_${l.code}`] || ''))}</textarea>
+                </div>`).join('')}
+                <div class="ad-hint">显示在搜索结果标题下方，建议 70–160 字符。留空自动使用简介。</div>
+              </div>
+
+              <div class="ad-field">
+                <label for="seo_keywords">关键词</label>
+                ${LANGS.map((l, i) => `<div data-lang-field="${esc(l.code)}" ${i === 0 ? '' : 'hidden'}>
+                  <input class="ad-input" id="${i === 0 ? 'seo_keywords' : `seo_keywords_${l.code}`}"
+                    name="${i === 0 ? 'seo_keywords' : `seo_keywords_${l.code}`}" maxlength="400"
+                    data-seo-keywords="${esc(l.code)}"
+                    value="${esc(i === 0 ? (t.seo_keywords || '') : (t[`seo_keywords_${l.code}`] || ''))}"
+                    placeholder="${esc(i === 0
+                      ? '留空则自动组合「名称 + 评测 + 分类 + 站点关键词」'
+                      : `${l.label} 关键词（选填，逗号分隔）`)}">
+                  <div class="ad-hint" data-seo-keyword-count="${esc(l.code)}"></div>
+                </div>`).join('')}
+                <div class="ad-hint">英文逗号分隔。提示：Google 早已不使用 meta keywords 参与排名，这里主要是保持 head 字段完整，给其他搜索引擎与工具读取。</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ad-card">
+            <div class="ad-card-head">
               <h2>评测正文</h2><span class="spacer"></span>
               <span class="an-note">Markdown · ${LANGS.map((l) => esc(l.short)).join(' / ')}</span>
               <button class="ad-btn ad-btn-sm ad-btn-primary" type="button" data-md-open>${UI.edit}打开编辑器</button>
@@ -1113,6 +1176,63 @@ export function toolFormPage({ user, env, nav = {}, tool, categories, flash, isN
 
         apply(tabs[0].getAttribute('data-form-lang'));
         refreshDots();
+      })();
+    </script>
+    <script>
+      /* Live width readout for the SEO title fields, using the same rule as the
+         server (letters/digits = 1, CJK = 2, punctuation = 0), so the number
+         shown here is not a second, disagreeing estimate. */
+      (function(){
+        function width(s) {
+          var w = 0;
+          for (var i = 0; i < s.length; i++) {
+            var cp = s.charCodeAt(i);
+            var wide = (cp >= 0x1100 && cp <= 0x115f) || (cp >= 0x2e80 && cp <= 0x303e)
+              || (cp >= 0x3041 && cp <= 0x33ff) || (cp >= 0x3400 && cp <= 0x4dbf)
+              || (cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0xac00 && cp <= 0xd7a3)
+              || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0xfe30 && cp <= 0xfe6f)
+              || (cp >= 0xff00 && cp <= 0xff60);
+            if (wide) w += 2;
+            else if (/[A-Za-z0-9]/.test(s.charAt(i))) w += 1;
+          }
+          return w;
+        }
+        var inputs = document.querySelectorAll('[data-seo-title]');
+        Array.prototype.forEach.call(inputs, function(inp){
+          var out = document.querySelector('[data-seo-width="' + inp.getAttribute('data-seo-title') + '"]');
+          if (!out) return;
+          function update(){
+            var v = inp.value.trim();
+            if (!v) {
+              out.textContent = '留空：使用模板生成的标题';
+              out.style.color = '';
+              return;
+            }
+            var w = width(v);
+            out.textContent = w + ' / 60 显示宽度' + (w > 60 ? '，超出部分可能被搜索结果截断' : '');
+            out.style.color = w > 60 ? '#DC2626' : '';
+          }
+          inp.addEventListener('input', update);
+          update();
+        });
+
+        var kwInputs = document.querySelectorAll('[data-seo-keywords]');
+        Array.prototype.forEach.call(kwInputs, function(inp){
+          var out = document.querySelector('[data-seo-keyword-count="' + inp.getAttribute('data-seo-keywords') + '"]');
+          if (!out) return;
+          function update(){
+            var items = inp.value.split(/[,，]/).map(function(s){ return s.trim(); }).filter(Boolean);
+            if (!items.length) {
+              out.textContent = '留空：使用自动组合的关键词';
+              out.style.color = '';
+              return;
+            }
+            out.textContent = items.length + ' 个关键词';
+            out.style.color = items.length > 12 ? '#B45309' : '';
+          }
+          inp.addEventListener('input', update);
+          update();
+        });
       })();
     </script>
   `;

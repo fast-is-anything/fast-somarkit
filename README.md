@@ -32,6 +32,7 @@
 | 仪表盘 | 收录数 / 分类数 / 累计访问 / 管理员数，最近更新、访问排行、操作日志 |
 | 访问统计 | 点击趋势、独立访客、国家/地区、来源页面、热门工具 Top12、零访问工具 |
 | 工具管理 | 列表 + 关键词/分类/状态/排序筛选 + 分页 + 新增/编辑/删除 |
+| SEO 标题、描述与关键词 | 每个工具可覆盖 4 种语言的 `<title>`、meta description 与 keywords（留空则用模板生成），后台实时显示标题宽度与关键词数量 |
 | 分类管理 | 增删改、图标选择、排序、显隐 |
 | 批量导入 | CSV 上传或粘贴，按 `url` 或 `name` 去重（存在则更新） |
 | 操作日志 | 记录谁在何时做了什么，可清空 |
@@ -289,6 +290,16 @@ npx wrangler d1 execute somarkit --remote --file=./db/migrations/007_tool_review
 ```
 
 本地把 `--remote` 换成 `--local`。
+
+### 结构迁移 008（工具级 SEO 覆盖）
+
+给 `tools` 加 12 列 `seo_title[_en|_ja|_ko]` / `seo_desc[_en|_ja|_ko]` / `seo_keywords[_en|_ja|_ko]`。SQLite 不支持 `ADD COLUMN IF NOT EXISTS`，**每个库只执行一次**；旧代码在新列缺失时也能跑，但后台表单与覆盖功能需要这些列：
+
+```bash
+npx wrangler d1 execute somarkit --remote --file=./db/migrations/008_tool_seo_overrides.sql
+```
+
+本地同样把 `--remote` 换成 `--local`。
 
 ### 批量导入 CSV
 

@@ -918,6 +918,9 @@ async function adminPost(env, ctx, request, path, url, user) {
         status: b.status || 'published',
         sort_order: Number(b.sort_order) || 0,
         review_md: String(b.review_md || ''),
+        seo_title: String(b.seo_title || '').trim(),
+        seo_desc: String(b.seo_desc || '').trim(),
+        seo_keywords: String(b.seo_keywords || '').trim(),
         ...readLocalizedFields(b),
         source: 'admin',
       });
@@ -973,6 +976,9 @@ async function adminPost(env, ctx, request, path, url, user) {
         status: b.status || 'published',
         sort_order: Number(b.sort_order) || 0,
         review_md: String(b.review_md || ''),
+        seo_title: String(b.seo_title || '').trim(),
+        seo_desc: String(b.seo_desc || '').trim(),
+        seo_keywords: String(b.seo_keywords || '').trim(),
         ...readLocalizedFields(b),
       });
       await logAudit(env.DB, user.email, 'tool.update', 'tool', id, name);
@@ -1192,6 +1198,9 @@ function readLocalizedFields(body) {
     out[`description_${code}`] = String(body[`description_${code}`] || '').trim();
     out[`tags_${code}`] = String(body[`tags_${code}`] || '').trim();
     out[`review_md_${code}`] = String(body[`review_md_${code}`] || '');
+    out[`seo_title_${code}`] = String(body[`seo_title_${code}`] || '').trim();
+    out[`seo_desc_${code}`] = String(body[`seo_desc_${code}`] || '').trim();
+    out[`seo_keywords_${code}`] = String(body[`seo_keywords_${code}`] || '').trim();
   });
   return out;
 }

@@ -266,8 +266,8 @@ const DICT = {
     'seo.categoryDesc': (name) =>
       `精选 ${name}，按定价、能力与适用场景对比，附官网直达与一句话评测，持续更新。`,
     'seo.toolH1': (name) => `${name} 评测`,
-    'seo.toolTitle': (name, year) => `${name} 评测（${year}）：功能、价格与替代方案`,
-    'seo.toolTitleShort': (name, year) => `${name} 评测（${year}）：功能与价格`,
+    'seo.toolTitle': (name) => `${name} 评测：功能、价格与替代方案`,
+    'seo.toolTitleShort': (name) => `${name} 评测：功能与价格`,
     'seo.toolDescSuffix': '本文整理它的核心功能、定价、优缺点与替代方案。',
     'seo.aboutTitle': '关于 SoMarkIt — AI 工具导航的收录与评测标准',
     'seo.aboutDesc':
@@ -450,8 +450,8 @@ const DICT = {
     'seo.categoryDesc': (name) =>
       `A curated list of ${name}, compared by pricing, capability and use case, with direct links and a one-line review.`,
     'seo.toolH1': (name) => `${name} Review`,
-    'seo.toolTitle': (name, year) => `${name} Review (${year}): Features, Pricing & Alternatives`,
-    'seo.toolTitleShort': (name, year) => `${name} Review (${year}): Features & Pricing`,
+    'seo.toolTitle': (name) => `${name} Review: Features, Pricing & Alternatives`,
+    'seo.toolTitleShort': (name) => `${name} Review: Features & Pricing`,
     'seo.toolDescSuffix': 'This review covers its key features, pricing, pros and cons, and alternatives.',
     'seo.aboutTitle': 'About SoMarkIt — How We Curate and Review AI Tools',
     'seo.aboutDesc':
@@ -634,8 +634,8 @@ const DICT = {
     'seo.categoryDesc': (name) =>
       `${name}を料金・機能・用途別に比較して厳選。公式サイトへの直リンクとひとことレビュー付きで、継続的に更新しています。`,
     'seo.toolH1': (name) => `${name} レビュー`,
-    'seo.toolTitle': (name, year) => `${name} レビュー（${year}）：機能・料金`,
-    'seo.toolTitleShort': (name, year) => `${name} レビュー（${year}）`,
+    'seo.toolTitle': (name) => `${name} レビュー：機能・料金`,
+    'seo.toolTitleShort': (name) => `${name} レビュー`,
     'seo.toolDescSuffix': '機能・料金・メリット・デメリット・代替ツールをまとめました。',
     'seo.aboutTitle': 'SoMarkIt について — AI ツールの選定と評価基準',
     'seo.aboutDesc':
@@ -818,8 +818,8 @@ const DICT = {
     'seo.categoryDesc': (name) =>
       `${name} 목록을 가격, 기능, 사용 사례별로 비교해 엄선했습니다. 공식 사이트 바로가기와 한 줄 리뷰를 함께 제공하며 계속 업데이트합니다.`,
     'seo.toolH1': (name) => `${name} 리뷰`,
-    'seo.toolTitle': (name, year) => `${name} 리뷰 (${year}): 기능, 가격, 대안`,
-    'seo.toolTitleShort': (name, year) => `${name} 리뷰 (${year})`,
+    'seo.toolTitle': (name) => `${name} 리뷰: 기능, 가격, 대안`,
+    'seo.toolTitleShort': (name) => `${name} 리뷰`,
     'seo.toolDescSuffix': '핵심 기능, 가격, 장단점, 대안을 정리했습니다.',
     'seo.aboutTitle': 'SoMarkIt 소개 — AI 도구 선정과 평가 기준',
     'seo.aboutDesc':

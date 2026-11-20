@@ -153,6 +153,8 @@ ${canonical && !noHreflang ? hreflangLinks(canonical, lang) : ''}
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:image" content="${esc(ogImage)}">
+<meta property="og:image:secure_url" content="${esc(ogImage)}">
+<meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="${esc(t(lang, 'seo.ogAlt'))}">
@@ -734,7 +736,6 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
 export function toolPage({ tool, categories, counts, related, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
   const siteDesc = t(lang, 'seo.siteDesc');
   const catName = tool.category_name || t(lang, 'detail.uncategorized');
-  const year = new Date().getFullYear();
   const canonical = `https://somarkit.com${localePath(lang, `/tools/${tool.slug}`)}`;
   const offers = tool.pricing === 'paid'
     ? undefined
@@ -783,24 +784,40 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
   // `localizeTool` has already resolved review_md to this locale, falling back
   // to the default language when the translation is blank — so the template
   // stays language-agnostic.
-  const titleFull = `${t(lang, 'seo.toolTitle', tool.name, year)} | SoMarkIt`;
-  const titleShort = `${t(lang, 'seo.toolTitleShort', tool.name, year)} | SoMarkIt`;
-  const pageTitle = displayWidth(titleFull) <= 60
+  // Per-tool SEO overrides (admin → "SEO 标题与描述"). Only the exact locale's
+  // column counts: borrowing the Chinese override would put a Chinese sentence
+  // into an English <title>, which is worse than the localized template.
+  const seoCode = normalizeLang(lang);
+  const override = (field) => String(
+    seoCode === DEFAULT_LANG ? (tool[field] || '') : (tool[`${field}_${seoCode}`] || '')
+  ).trim();
+  const customTitle = override('seo_title');
+  const customDesc = override('seo_desc');
+  const customKeywords = override('seo_keywords');
+
+  // Tool titles are evergreen: no year. A year only earns its place on pages
+  // whose query carries one (the category round-ups); on a brand review it just
+  // spends title width and makes every page look bulk-generated.
+  const titleFull = `${t(lang, 'seo.toolTitle', tool.name)} | SoMarkIt`;
+  const titleShort = `${t(lang, 'seo.toolTitleShort', tool.name)} | SoMarkIt`;
+  const pageTitle = customTitle || (displayWidth(titleFull) <= 60
     ? titleFull
-    : (displayWidth(titleShort) <= 60 ? titleShort : `${tool.name} | SoMarkIt`);
+    : (displayWidth(titleShort) <= 60 ? titleShort : `${tool.name} | SoMarkIt`));
   const baseDescription = (tool.description || siteDesc).trim();
   const separator = /[。！？.!?]$/.test(baseDescription)
     ? ' '
     : (lang === 'zh' || lang === 'ja' ? '。' : '. ');
-  const description = displayWidth(baseDescription) >= 70
+  const templateDescription = displayWidth(baseDescription) >= 70
     ? baseDescription
     : `${baseDescription}${separator}${t(lang, 'seo.toolDescSuffix')}`.trim();
+  const description = customDesc || templateDescription;
 
   const body = `${head({
     title: pageTitle,
     description,
     canonical,
-    keywords: [tool.name, `${tool.name} ${t(lang, 'card.review')}`, catName, t(lang, 'seo.keywords')].join(','),
+    keywords: customKeywords
+      || [tool.name, `${tool.name} ${t(lang, 'card.review')}`, catName, t(lang, 'seo.keywords')].join(','),
     ogType: 'article',
     modifiedTime: tool.updated_at || '',
     jsonLd,
