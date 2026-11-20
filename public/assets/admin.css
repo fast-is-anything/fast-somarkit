@@ -1,5 +1,5 @@
 /* ==========================================================================
-   SoMarkIt 鈥?admin console
+   SoMarkIt 閳?admin console
    ========================================================================== */
 
 :root {
@@ -120,7 +120,7 @@ button { font-family: inherit; }
 
 /* Collapse control: only shown while the sidebar is expanded. Once collapsed,
    the logo itself becomes the expand control.
-   Bare icon 鈥?no border and no box, matching the public site's sidebar. */
+   Bare icon 閳?no border and no box, matching the public site's sidebar. */
 .ad-collapse-btn {
   display: grid; place-items: center;
   width: 28px; height: 28px; flex-shrink: 0;
@@ -243,7 +243,7 @@ button { font-family: inherit; }
   display: flex; flex-direction: column;
   /* Natural document flow: the page scrolls normally and tall content is
      never clipped. (An earlier `height: 100vh; overflow: hidden` here locked
-     the column to one screen and broke long pages on mobile 鈥?gone.) */
+     the column to one screen and broke long pages on mobile 閳?gone.) */
   min-height: 100vh;
 }
 
@@ -278,7 +278,7 @@ button { font-family: inherit; }
 .ad-icon-btn:hover { background: var(--ad-surface-2); color: var(--ad-text); }
 
 /* Content fills whatever width the viewport gives it. A hard max-width used to
-   cap this column at 1320px, which left a large dead band on 2K/4K screens 鈥?   the admin console is a data tool, so it should use all the space it has. */
+   cap this column at 1320px, which left a large dead band on 2K/4K screens 閳?   the admin console is a data tool, so it should use all the space it has. */
 .ad-content {
   padding: 24px; flex: 1; width: 100%;
   /* No max-width: the shell already constrains the column to the viewport, so
@@ -318,7 +318,7 @@ button { font-family: inherit; }
 
 /* A list card fills whatever vertical space is left in the content column,
    whatever banners sit above it. The table area then takes the remainder
-   between the card header and the pager, so the page itself never scrolls 鈥?   with 0 rows or 100, with or without an info banner. */
+   between the card header and the pager, so the page itself never scrolls 閳?   with 0 rows or 100, with or without an info banner. */
 .ad-card:has([data-fixed-table]) {
   flex: 1 1 auto;
   display: flex; flex-direction: column;
@@ -469,7 +469,7 @@ table.ad-table {
 .ad-table td.ad-cell-nowrap,
 .ad-table td.ad-cell-date { white-space: nowrap; }
 
-/* The first (name) column carries the flexible width and wraps normally 鈥?   except when the first cell is a rank number, which must stay narrow. */
+/* The first (name) column carries the flexible width and wraps normally 閳?   except when the first cell is a rank number, which must stay narrow. */
 .ad-table td:first-child { min-width: 180px; }
 .ad-table td.ad-cell-rank,
 .ad-table td:first-child.ad-cell-rank { min-width: 0; width: 40px; }
@@ -484,7 +484,7 @@ table.ad-table {
   max-width: 320px;
 }
 /* Inside a fixed-height list the first column must be able to shrink, or the
-   table overflows its box and every row grows a line taller (60px 鈫?104px) as
+   table overflows its box and every row grows a line taller (60px 閳?104px) as
    cell contents wrap. Truncate with an ellipsis instead. */
 .ad-table-wrap[data-fixed-table] .ad-table td:first-child { min-width: 140px; }
 .ad-table-wrap[data-fixed-table] .ad-cell-main,
@@ -505,7 +505,7 @@ table.ad-table {
 
 /* `table-layout: fixed` for list tables: with `auto` the browser sizes columns
    from the widest cell, so a long URL forces the table wider than its box and
-   every row wraps to 2鈥? lines. Fixed layout keeps every row one line tall and
+   every row wraps to 2閳? lines. Fixed layout keeps every row one line tall and
    lets the text ellipsis do the truncating instead. */
 .ad-table-wrap[data-fixed-table] .ad-table { table-layout: fixed; width: 100%; }
 .ad-table-wrap[data-fixed-table] .ad-table th,
@@ -513,7 +513,7 @@ table.ad-table {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* `table-layout: fixed` needs an explicit width for the first column. The
-   `:not(.ad-cell-rank)` guard keeps rank columns narrow 鈥?without it this
+   `:not(.ad-cell-rank)` guard keeps rank columns narrow 閳?without it this
    selector's specificity (0,3,3) beat the `.ad-cell-rank` rule and stretched
    the "#" column to 30% of the table. */
 .ad-table-wrap[data-fixed-table] .ad-table td:first-child:not(.ad-cell-rank),
@@ -546,9 +546,9 @@ table.ad-table {
    Every list page reserves exactly the same vertical space, whether it holds
    0 rows or 120, with or without an info banner: the table area is a fixed
    viewport-relative height with a sticky header. Consequences:
-     鈥?the card never "breathes" as data comes and goes,
-     鈥?the pager always sits at the same place on screen,
-     鈥?banners above the card are compensated by a slightly shorter table, so
+     閳?the card never "breathes" as data comes and goes,
+     閳?the pager always sits at the same place on screen,
+     閳?banners above the card are compensated by a slightly shorter table, so
        they never push the page into a scroll.
    -------------------------------------------------------------------------- */
 .ad-table-wrap[data-fixed-table] {
@@ -579,7 +579,7 @@ table.ad-table {
 .ad-table-wrap[data-fixed-table]::-webkit-scrollbar-thumb:hover { background: var(--ad-text-3); }
 
 /* --------------------------------------------------------------------------
-   Pager: "showing a鈥揵 of n", first/prev/numbered/next/last, rows per page.
+   Pager: "showing a閳ユ彽 of n", first/prev/numbered/next/last, rows per page.
    -------------------------------------------------------------------------- */
 .ad-pager {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -633,7 +633,7 @@ table.ad-table {
   table.ad-table tbody { display: block; width: 100%; }
 
   table.ad-table thead { display: none; }
-  table.ad-table td[data-label="鏍囪"] { display: none; }
+  table.ad-table td[data-label="标记"] { display: none; }
 
   table.ad-table tbody tr {
     display: grid;
@@ -688,7 +688,7 @@ table.ad-table {
     color: var(--ad-text-3);
     margin-bottom: 2px;
   }
-  table.ad-table td[data-label="宸ュ叿"]::before { display: none; }
+  table.ad-table td[data-label="工具"]::before { display: none; }
   .ad-cell-sub { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* Actions always occupy their own full-width row. */
@@ -782,7 +782,7 @@ table.ad-table {
   word-break: break-word;
 }
 .ad-md-preview.is-empty {
-  /* An unfilled language needs no preview box 鈥?keep it to one compact line. */
+  /* An unfilled language needs no preview box 閳?keep it to one compact line. */
   color: var(--ad-text-3); font-style: italic;
   min-height: 0; padding: 8px 14px; margin-top: 6px;
 }
@@ -1246,7 +1246,7 @@ body.md-editing { overflow: hidden; }
 
 /* ------------------------------------------------------- page transition */
 /* Covers the main column only, so the rail (and the freshly-selected nav
-   item) stays visible 鈥?the click visibly "lands" before the page swaps. */
+   item) stays visible 閳?the click visibly "lands" before the page swaps. */
 .ad-loader {
   position: fixed;
   top: 0; right: 0; bottom: 0; left: var(--ad-sidebar-w);
@@ -1341,7 +1341,7 @@ body.is-loading .ad-loader { display: flex; opacity: 1; }
   .ad-card-head .ad-toolbar + .ad-btn-primary { margin-left: auto; }
 
   /* The primary "add" action drops onto its own row instead of floating
-     beside the filters 鈥?but only when cards genuinely get narrow. */
+     beside the filters 閳?but only when cards genuinely get narrow. */
   .ad-card-head > .ad-btn-primary { flex: 0 0 auto; }
 
   .ad-card-head { padding: 12px 14px; gap: 8px; }
@@ -1466,4 +1466,39 @@ body.is-loading .ad-loader { display: flex; opacity: 1; }
 .sub-detail-actions form { display: inline-flex; }
 @media (max-width: 520px) {
   .sub-detail-grid { grid-template-columns: 1fr; }
+}
+/* --------------------------------------------------------------------------
+   Confirmation dialog.
+   Replaces window.confirm() so a destructive action asks in the same visual
+   language as the rest of the console instead of an OS dialog.
+   -------------------------------------------------------------------------- */
+.ad-dialog-confirm {
+  width: min(420px, calc(100vw - 32px));
+}
+/* No body scrolling here — the message is a line or two. */
+.ad-dialog-confirm .ad-dialog-body {
+  max-height: none;
+  overflow: visible;
+}
+.ad-confirm-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ad-text-2);
+  white-space: pre-wrap;
+}
+.ad-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--ad-border);
+  background: var(--ad-surface-2);
+}
+/* The confirm button takes focus so Enter accepts and Esc cancels, matching
+   what people expect from a browser confirm. */
+.ad-dialog-confirm [data-confirm-ok]:focus-visible,
+.ad-dialog-confirm [data-confirm-cancel]:focus-visible {
+  outline: 2px solid var(--ad-primary);
+  outline-offset: 2px;
 }

@@ -254,14 +254,94 @@
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTable);
 
   /* --------------------------------------------------------- confirmations */
+  /*
+   * `data-confirm="…"` on a form or a link asks before doing something
+   * destructive. This used to call window.confirm(), which paints a browser
+   * dialog in the OS style and blocks the page. It now opens the same styled
+   * <dialog> the rest of the admin uses.
+   *
+   * Because the custom dialog is asynchronous, the original action is replayed
+   * once the user agrees: a hidden `confirmed` flag makes the second pass fall
+   * through to the normal behaviour.
+   */
+  var confirmEl = null;
+  var confirmResolve = null;
+
+  function buildConfirmDialog() {
+    if (confirmEl) return confirmEl;
+    confirmEl = document.createElement('dialog');
+    confirmEl.className = 'ad-dialog ad-dialog-confirm';
+    confirmEl.innerHTML =
+      '<div class="ad-dialog-head"><h2>请确认</h2></div>' +
+      '<div class="ad-dialog-body"><p class="ad-confirm-text"></p></div>' +
+      '<div class="ad-dialog-foot">' +
+        '<button type="button" class="ad-btn" data-confirm-cancel>取消</button>' +
+        '<button type="button" class="ad-btn ad-btn-danger" data-confirm-ok>确定</button>' +
+      '</div>';
+    document.body.appendChild(confirmEl);
+
+    confirmEl.addEventListener('click', function (e) {
+      var t = e.target;
+      // Answer first, then close: closing fires the `close` handler below,
+      // which would otherwise settle the promise as a cancel.
+      if (t.closest('[data-confirm-ok]')) { settle(true); closeConfirm(); }
+      else if (t.closest('[data-confirm-cancel]')) { settle(false); closeConfirm(); }
+      else if (t === confirmEl) { settle(false); closeConfirm(); }   // backdrop
+    });
+    // ESC closes the dialog natively; treat that as a cancel.
+    confirmEl.addEventListener('close', function () { settle(false); });
+    return confirmEl;
+  }
+
+  function closeConfirm() {
+    if (confirmEl && confirmEl.open) confirmEl.close();
+  }
+
+  function settle(ok) {
+    if (!confirmResolve) return;
+    var done = confirmResolve;
+    confirmResolve = null;
+    done(ok);
+  }
+
+  /** Show the dialog; resolves true when the user confirms. */
+  function askConfirm(message) {
+    var dlg = buildConfirmDialog();
+    // The dialog may already be open if a replayed action ran twice.
+    if (dlg.open) settle(false);
+
+    dlg.querySelector('.ad-confirm-text').textContent = message || '确定继续吗？';
+    // A destructive action gets a red button; everything else stays neutral.
+    var ok = dlg.querySelector('[data-confirm-ok]');
+
+    return new Promise(function (resolve) {
+      confirmResolve = resolve;
+      if (typeof dlg.showModal === 'function') dlg.showModal();
+      else resolve(window.confirm(message));   // very old browser fallback
+      if (ok) ok.focus();
+    });
+  }
+
   document.addEventListener('submit', function (e) {
     var form = e.target;
     if (!form || !form.dataset) return;
+
     var msg = form.getAttribute('data-confirm');
-    if (msg && !window.confirm(msg)) {
+    if (msg && form.dataset.confirmed !== '1') {
       e.preventDefault();
+      var pendingForm = form;
+      askConfirm(msg).then(function (ok) {
+        if (!ok) return;
+        pendingForm.dataset.confirmed = '1';
+        // requestSubmit() re-runs this handler (which now passes through) and
+        // keeps the browser's own validation and submit semantics.
+        if (typeof pendingForm.requestSubmit === 'function') pendingForm.requestSubmit();
+        else pendingForm.submit();
+      });
       return;
     }
+    delete form.dataset.confirmed;
+
     // Guard against double submits
     var submit = form.querySelector('[type="submit"]');
     if (submit) {
@@ -276,7 +356,20 @@
 
   document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a[data-confirm]');
-    if (a && !window.confirm(a.getAttribute('data-confirm'))) e.preventDefault();
+    if (!a) return;
+
+    if (a.dataset.confirmed === '1') {
+      delete a.dataset.confirmed;
+      return;   // second pass: let the navigation happen
+    }
+
+    e.preventDefault();
+    var pendingLink = a;
+    askConfirm(a.getAttribute('data-confirm')).then(function (ok) {
+      if (!ok) return;
+      pendingLink.dataset.confirmed = '1';
+      pendingLink.click();
+    });
   });
 
   /* ---------------------------------------------------------------- toast */
