@@ -254,6 +254,7 @@ async function router(request, env, ctx) {
    */
   if (pubPath === '/search') {
     const q = (url.searchParams.get('q') || '').trim();
+    const page = Math.max(1, Number(url.searchParams.get('page') || 1) || 1);
     const [categories, counts, allTools] = await Promise.all([
       loadCategories(env.DB, lang),
       countToolsByCategory(env.DB),
@@ -262,6 +263,7 @@ async function router(request, env, ctx) {
     return withLang(searchPage({
       q,
       results: matchTools(allTools, q),
+      page,
       categories, counts, total: allTools.length,
       theme, lang, gaId, basePath: pubPath, ...pageFlags,
     }));

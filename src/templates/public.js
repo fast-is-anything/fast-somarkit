@@ -241,7 +241,8 @@ function topbar({ categories, activeSlug = 'all', lang = DEFAULT_LANG, basePath 
             data-search-url="${esc(localePath(lang, '/search'))}"
             data-search-api="${esc(localePath(lang, '/api/search'))}"
             data-no-results="${esc(t(lang, 'search.noResults'))}"
-            data-all-label="${esc(t(lang, 'search.viewAll'))}">
+            data-all-label="${esc(t(lang, 'search.viewAll'))}"
+            data-loading-label="${esc(t(lang, 'search.loading'))}">
         </div>
       </div>
       <div class="topbar-actions">
@@ -299,7 +300,8 @@ function hero({ total, catCount, featured, lang = DEFAULT_LANG }) {
                 data-search-url="${esc(localePath(lang, '/search'))}"
                 data-search-api="${esc(localePath(lang, '/api/search'))}"
             data-no-results="${esc(t(lang, 'search.noResults'))}"
-            data-all-label="${esc(t(lang, 'search.viewAll'))}">
+            data-all-label="${esc(t(lang, 'search.viewAll'))}"
+            data-loading-label="${esc(t(lang, 'search.loading'))}">
               <button class="search-btn" type="button" aria-label="${esc(t(lang, 'hero.searchBtn'))}">${UI.arrowIn}</button>
             </div>
           </div>
@@ -805,14 +807,24 @@ export function categoryPage({ category, categories, counts, tools, allTools, fe
  * Server-rendered from the whole catalogue, so the topbar field works from any
  * page (a tool detail, a 404, the about page) and the URL is shareable. The
  * result cards are the same ones the listings use.
+ *
+ * Paginated: a query like "ai" matches most of the catalogue, and rendering
+ * every match made the page long and slow for no benefit.
  */
-export function searchPage({ q, results, categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
+export const SEARCH_PAGE_SIZE = 24;
+
+export function searchPage({ q, results, page = 1, categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
   const query = String(q || '').trim();
-  const n = results.length;
+  const matched = results.length;
+  const pages = Math.max(1, Math.ceil(matched / SEARCH_PAGE_SIZE));
+  const current = Math.min(Math.max(1, Number(page) || 1), pages);
+  const start = (current - 1) * SEARCH_PAGE_SIZE;
+  const pageItems = results.slice(start, start + SEARCH_PAGE_SIZE);
+
   const title = query ? t(lang, 'search.title', query) : t(lang, 'search.titleEmpty');
 
-  const cards = n
-    ? `<div class="tools-grid">${results.map((item) => toolCard(item, lang)).join('')}</div>`
+  const cards = matched
+    ? `<div class="tools-grid">${pageItems.map((item) => toolCard(item, lang)).join('')}</div>`
     : `<div class="empty-state" id="emptyState">
         <div class="empty-icon">${UI.search}</div>
         <h2 class="empty-title">${esc(t(lang, 'search.noResults'))}</h2>
@@ -820,11 +832,30 @@ export function searchPage({ q, results, categories, counts, total, theme, lang 
         <a class="nav-btn nav-btn-primary" href="${esc(localePath(lang, '/'))}">${esc(t(lang, 'search.backHome'))}</a>
       </div>`;
 
+  // Page links, with a window of 5 around the current page.
+  let pager = '';
+  if (pages > 1) {
+    const link = (n, label, extra = '') =>
+      `<a class="search-page ${extra}" href="${esc(localePath(lang, '/search'))}?q=${encodeURIComponent(query)}&page=${n}"
+        ${extra === 'cur' ? 'aria-current="page"' : ''}>${label}</a>`;
+
+    let nums = '';
+    const from = Math.max(1, Math.min(current - 2, pages - 4));
+    const to = Math.min(pages, from + 4);
+    for (let n = from; n <= to; n++) nums += link(n, String(n), n === current ? 'cur' : '');
+
+    pager = `<nav class="search-pager" aria-label="${esc(t(lang, 'search.pagerAria'))}">
+      ${current > 1 ? link(current - 1, t(lang, 'search.prev'), 'step') : `<span class="search-page step disabled">${esc(t(lang, 'search.prev'))}</span>`}
+      ${nums}
+      ${current < pages ? link(current + 1, t(lang, 'search.next'), 'step') : `<span class="search-page step disabled">${esc(t(lang, 'search.next'))}</span>`}
+    </nav>`;
+  }
+
   return new Response(
     `${head({
       title: `${title} | SoMarkIt`,
       description: query
-        ? t(lang, 'search.description', query, n)
+        ? t(lang, 'search.description', query, matched)
         : t(lang, 'seo.siteDesc'),
       // A result page is a view of an index, not content: keep it out of the
       // index so thousands of query permutations cannot bloat the site.
@@ -837,14 +868,17 @@ export function searchPage({ q, results, categories, counts, total, theme, lang 
   <div class="main-wrapper">
     ${mobileHeader(lang, basePath)}
     ${topbar({ categories, lang, basePath })}
-    <main id="main-content" class="detail-wrap">
-      <div class="search-head">
-        <h1 class="search-title">${query ? esc(t(lang, 'search.heading', query)) : esc(t(lang, 'search.headingEmpty'))}</h1>
-        <p class="search-count">${query
-          ? esc(n ? t(lang, 'search.count', n) : t(lang, 'search.countNone'))
-          : esc(t(lang, 'search.hint'))}</p>
+    <main id="main-content">
+      <div class="content-area">
+        <div class="search-head">
+          <h1 class="search-title">${query ? esc(t(lang, 'search.heading', query)) : esc(t(lang, 'search.headingEmpty'))}</h1>
+          <p class="search-count">${query
+            ? (matched ? esc(t(lang, 'search.count', matched)) : esc(t(lang, 'search.countNone')))
+            : esc(t(lang, 'search.hint'))}</p>
+        </div>
+        ${cards}
+        ${pager}
       </div>
-      ${cards}
     </main>
     ${footer(new Date().getFullYear(), lang, basePath)}
   </div>

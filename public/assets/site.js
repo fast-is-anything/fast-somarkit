@@ -469,6 +469,9 @@
   var taActive = -1;    // highlighted index
   var taSeq = 0;        // guards against out-of-order responses
   var taTimer;
+  // The popup is a shortcut, not a results page: six rows keep it compact and
+  // leave "view all" as the obvious way to see the rest.
+  var TA_MAX = 6;
 
   function typeaheadOpen() { return !!(ta && ta.classList.contains('open')); }
 
@@ -543,11 +546,12 @@
       taActive = -1;
       typeaheadPosition(input);
       box.hidden = false;
+      box.classList.remove('loading');
       box.classList.add('open');
       return;
     }
 
-    var rows = results.slice(0, 8).map(function (r) {
+    var rows = results.slice(0, TA_MAX).map(function (r) {
       var href = input.getAttribute('data-search-url');
       // /search/<slug> is the tool page; build it from the current search URL's
       // locale prefix so the popup stays inside the active language.
@@ -560,16 +564,42 @@
     }).join('');
 
     // "全部结果" is always last, so Enter with nothing highlighted opens it.
+    var total = (data && data.count) || results.length;
     more = '<a class="search-pop-all" href="' + escText(input.getAttribute('data-search-url'))
       + '?q=' + encodeURIComponent(q) + '">'
-      + escText(input.getAttribute('data-all-label') || 'View all results') + ' →</a>';
+      + escText(input.getAttribute('data-all-label') || 'View all results')
+      + (total > TA_MAX ? ' (' + total + ')' : '') + ' →</a>';
 
     box.innerHTML = '<div class="search-pop-list">' + rows + '</div>' + more;
     taItems = Array.prototype.slice.call(box.querySelectorAll('.search-pop-item'));
     taActive = -1;
     typeaheadPosition(input);
     box.hidden = false;
+    box.classList.remove('loading');
     box.classList.add('open');
+  }
+
+  /**
+   * Paint placeholder rows the moment the field has text.
+   *
+   * Waiting for the request before showing anything made the field feel dead on
+   * a slow connection; the popup now opens instantly and fills in.
+   */
+  function showTypeaheadLoading(input) {
+    var box = ensureTypeahead();
+    var skeleton = '';
+    for (var i = 0; i < 3; i++) {
+      skeleton += '<div class="search-pop-item is-skeleton" aria-hidden="true">'
+        + '<span class="sk-bar sk-bar-name"></span><span class="sk-bar sk-bar-cat"></span></div>';
+    }
+    box.innerHTML = '<div class="search-pop-list">' + skeleton + '</div>'
+      + '<div class="search-pop-loading" role="status">'
+      + escText(input.getAttribute('data-loading-label') || 'Searching…') + '</div>';
+    taItems = [];
+    taActive = -1;
+    typeaheadPosition(input);
+    box.hidden = false;
+    box.classList.add('open', 'loading');
   }
 
   function escText(s) {
@@ -583,6 +613,10 @@
     if (!q) { closeTypeahead(); return; }
     var api = input.getAttribute('data-search-api');
     if (!api) return;
+
+    // Open with placeholders immediately, then debounce the request itself.
+    showTypeaheadLoading(input);
+
     clearTimeout(taTimer);
     taTimer = setTimeout(function () {
       var seq = ++taSeq;
