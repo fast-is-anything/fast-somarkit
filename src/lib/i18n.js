@@ -106,9 +106,7 @@ const DICT = {
     'content.toolsCount': (n) => `共 ${n} 个工具`,
     'content.filtered': (n) => `筛选出 ${n} 个工具`,
     'content.filterAria': '按定价筛选',
-    'content.total': (n) => `共 ${n} 个`,
     'content.viewAll': '查看全部',
-    'content.matched': (n, t) => `匹配 ${n} / ${t} 个`,
 
     'pricing.all': '全部',
     'pricing.free': '免费',
@@ -232,9 +230,7 @@ const DICT = {
     'content.toolsCount': (n) => `${n} tools`,
     'content.filtered': (n) => `${n} tools matched`,
     'content.filterAria': 'Filter by pricing',
-    'content.total': (n) => `${n} total`,
     'content.viewAll': 'View all',
-    'content.matched': (n, t) => `${n} of ${t}`,
 
     'pricing.all': 'All',
     'pricing.free': 'Free',
@@ -358,9 +354,7 @@ const DICT = {
     'content.toolsCount': (n) => `全 ${n} 件のツール`,
     'content.filtered': (n) => `${n} 件が一致`,
     'content.filterAria': '料金で絞り込む',
-    'content.total': (n) => `全 ${n} 件`,
     'content.viewAll': 'すべて見る',
-    'content.matched': (n, t) => `${n} / ${t} 件`,
 
     'pricing.all': 'すべて',
     'pricing.free': '無料',
@@ -484,9 +478,7 @@ const DICT = {
     'content.toolsCount': (n) => `총 ${n}개 도구`,
     'content.filtered': (n) => `${n}개 도구가 일치`,
     'content.filterAria': '가격으로 필터링',
-    'content.total': (n) => `총 ${n}개`,
     'content.viewAll': '전체 보기',
-    'content.matched': (n, t) => `${n} / ${t}개`,
 
     'pricing.all': '전체',
     'pricing.free': '무료',

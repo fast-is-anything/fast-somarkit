@@ -467,7 +467,6 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEF
         <div class="category-section-header">
           <span class="cat-icon">${icon(g.category.icon)}</span>
           <span class="cat-name">${esc(categoryLabel(g.category, lang))}</span>
-          <span class="cat-count">${esc(t(lang, 'content.total', shown))}</span>
           ${more && !open ? `<a class="section-more" href="${esc(localePath(lang, `/${g.category.slug}`))}">${esc(t(lang, 'content.viewAll'))} →</a>` : ''}
         </div>
         <div class="tools-grid" data-rail-grid>${cards}</div>

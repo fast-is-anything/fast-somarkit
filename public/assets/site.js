@@ -84,31 +84,24 @@
   });
 
   /* ------------------------------------------------------- sidebar collapse */
-  // Count-label formatters, kept in sync with src/lib/i18n.js.
+  // Count-label formatters for the page-level counter, kept in sync with
+  // src/lib/i18n.js. Section headers no longer show a per-category count.
   var COUNT_STRINGS = {
     zh: {
       toolsCount: function (n) { return '共 ' + n + ' 个工具'; },
       filtered: function (n) { return '筛选出 ' + n + ' 个工具'; },
-      total: function (n) { return '共 ' + n + ' 个'; },
-      matched: function (n, all) { return '匹配 ' + n + ' / ' + all + ' 个'; },
     },
     en: {
       toolsCount: function (n) { return n + ' tools'; },
       filtered: function (n) { return n + ' tools matched'; },
-      total: function (n) { return n + ' total'; },
-      matched: function (n, all) { return n + ' of ' + all; },
     },
     ja: {
       toolsCount: function (n) { return '全 ' + n + ' 件のツール'; },
       filtered: function (n) { return n + ' 件が一致'; },
-      total: function (n) { return '全 ' + n + ' 件'; },
-      matched: function (n, all) { return n + ' / ' + all + ' 件'; },
     },
     ko: {
       toolsCount: function (n) { return '총 ' + n + '개 도구'; },
       filtered: function (n) { return n + '개 도구가 일치'; },
-      total: function (n) { return '총 ' + n + '개'; },
-      matched: function (n, all) { return n + ' / ' + all + '개'; },
     },
   };
   var T = COUNT_STRINGS[currentLang()] || COUNT_STRINGS.zh;
@@ -215,16 +208,6 @@
       var any = s.querySelectorAll('.tool-card:not([style*="display: none"])').length > 0;
       var okCat = state.category === 'all' || s.getAttribute('data-category') === state.category;
       s.style.display = okCat && any ? '' : 'none';
-      var cnt = s.querySelector('.cat-count');
-      if (cnt) {
-        // Count relative to what this section actually contains, not to the
-        // category's full size. A rail deliberately renders only its first
-        // page, so comparing against the catalogue total would print
-        // "9 / 16" on an unfiltered homepage.
-        var rendered = s.getAttribute('data-rendered') || s.querySelectorAll('.tool-card').length;
-        var visible = s.querySelectorAll('.tool-card:not([style*="display: none"])').length;
-        cnt.textContent = visible === +rendered ? T.total(visible) : T.matched(visible, rendered);
-      }
     });
 
     if (emptyEl) emptyEl.style.display = shown === 0 ? '' : 'none';
@@ -614,11 +597,8 @@
 
           if (data.html) gridOf(sec).insertAdjacentHTML('beforeend', data.html);
 
-          // Keep the header count in step, in the page's own language.
-          var rendered = gridOf(sec).querySelectorAll('.tool-card').length;
-          sec.setAttribute('data-rendered', rendered);
-          var cnt = sec.querySelector('.cat-count');
-          if (cnt) cnt.textContent = T.total(rendered);
+          // data-rendered drives the "are there cards left" check.
+          sec.setAttribute('data-rendered', gridOf(sec).querySelectorAll('.tool-card').length);
 
           if (data.nextCursor) {
             sec.dataset.cursor = data.nextCursor;

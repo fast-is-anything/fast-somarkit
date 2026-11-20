@@ -919,7 +919,6 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 .category-section-header .cat-name {
   font-size: var(--text-lg); font-weight: 700; letter-spacing: -.02em;
 }
-.cat-count { font-size: var(--text-sm); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 
 /* "View all" link on a homepage rail: pushed to the right of the section
    header, only shown when the rail had to truncate. */
