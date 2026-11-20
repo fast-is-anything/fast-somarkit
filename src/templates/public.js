@@ -237,7 +237,11 @@ function topbar({ categories, activeSlug = 'all', lang = DEFAULT_LANG, basePath 
         <div class="nav-search-wrapper">
           <span class="search-icon">${UI.search}</span>
           <input type="search" class="nav-search-input js-search" id="navSearchInput"
-            placeholder="${esc(t(lang, 'nav.search'))}" autocomplete="off" aria-label="${esc(t(lang, 'nav.searchAria'))}">
+            placeholder="${esc(t(lang, 'nav.search'))}" autocomplete="off" aria-label="${esc(t(lang, 'nav.searchAria'))}"
+            data-search-url="${esc(localePath(lang, '/search'))}"
+            data-search-api="${esc(localePath(lang, '/api/search'))}"
+            data-no-results="${esc(t(lang, 'search.noResults'))}"
+            data-all-label="${esc(t(lang, 'search.viewAll'))}">
         </div>
       </div>
       <div class="topbar-actions">
@@ -291,7 +295,11 @@ function hero({ total, catCount, featured, lang = DEFAULT_LANG }) {
             <div class="hero-search-wrapper">
               <span class="search-icon">${UI.search}</span>
               <input type="search" class="hero-search-input js-search" id="heroSearchInput"
-                placeholder="${esc(t(lang, 'hero.searchPlaceholder'))}" data-ph-short="${esc(t(lang, 'hero.searchPlaceholderShort'))}" autocomplete="off" aria-label="${esc(t(lang, 'nav.searchAria'))}">
+                placeholder="${esc(t(lang, 'hero.searchPlaceholder'))}" data-ph-short="${esc(t(lang, 'hero.searchPlaceholderShort'))}" autocomplete="off" aria-label="${esc(t(lang, 'nav.searchAria'))}"
+                data-search-url="${esc(localePath(lang, '/search'))}"
+                data-search-api="${esc(localePath(lang, '/api/search'))}"
+            data-no-results="${esc(t(lang, 'search.noResults'))}"
+            data-all-label="${esc(t(lang, 'search.viewAll'))}">
               <button class="search-btn" type="button" aria-label="${esc(t(lang, 'hero.searchBtn'))}">${UI.arrowIn}</button>
             </div>
           </div>
@@ -791,8 +799,64 @@ export function categoryPage({ category, categories, counts, tools, allTools, fe
   );
 }
 
-export function aboutPage({ categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
-  // Body copy lives in the dictionaries (about.*) so every locale is translated
+/**
+ * Search results page.
+ *
+ * Server-rendered from the whole catalogue, so the topbar field works from any
+ * page (a tool detail, a 404, the about page) and the URL is shareable. The
+ * result cards are the same ones the listings use.
+ */
+export function searchPage({ q, results, categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
+  const query = String(q || '').trim();
+  const n = results.length;
+  const title = query ? t(lang, 'search.title', query) : t(lang, 'search.titleEmpty');
+
+  const cards = n
+    ? `<div class="tools-grid">${results.map((item) => toolCard(item, lang)).join('')}</div>`
+    : `<div class="empty-state" id="emptyState">
+        <div class="empty-icon">${UI.search}</div>
+        <h2 class="empty-title">${esc(t(lang, 'search.noResults'))}</h2>
+        <p class="empty-hint">${esc(t(lang, 'search.noResultsHint'))}</p>
+        <a class="nav-btn nav-btn-primary" href="${esc(localePath(lang, '/'))}">${esc(t(lang, 'search.backHome'))}</a>
+      </div>`;
+
+  return new Response(
+    `${head({
+      title: `${title} | SoMarkIt`,
+      description: query
+        ? t(lang, 'search.description', query, n)
+        : t(lang, 'seo.siteDesc'),
+      // A result page is a view of an index, not content: keep it out of the
+      // index so thousands of query permutations cannot bloat the site.
+      noindex: true,
+      theme, lang, gaId,
+    })}
+<body>
+<div class="app-layout">
+  ${sidebar({ categories, counts, activeSlug: 'all', total, lang, basePath })}
+  <div class="main-wrapper">
+    ${mobileHeader(lang, basePath)}
+    ${topbar({ categories, lang, basePath })}
+    <main id="main-content" class="detail-wrap">
+      <div class="search-head">
+        <h1 class="search-title">${query ? esc(t(lang, 'search.heading', query)) : esc(t(lang, 'search.headingEmpty'))}</h1>
+        <p class="search-count">${query
+          ? esc(n ? t(lang, 'search.count', n) : t(lang, 'search.countNone'))
+          : esc(t(lang, 'search.hint'))}</p>
+      </div>
+      ${cards}
+    </main>
+    ${footer(new Date().getFullYear(), lang, basePath)}
+  </div>
+</div>
+${pageLoader()}
+<script src="/assets/site.js" defer></script>
+</body></html>`,
+    { headers: { 'content-type': 'text/html; charset=utf-8' } }
+  );
+}
+
+export function aboutPage({ categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {  // Body copy lives in the dictionaries (about.*) so every locale is translated
   // by the same table rather than by an if/else in this template.
   const body = `${head({
     title: t(lang, 'about.title'),

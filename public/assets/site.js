@@ -411,15 +411,202 @@
           applyFilters();
         }
       }, 110);
+      askTypeahead(input, v);
     });
     input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      // Arrow keys walk the popup; Enter opens the highlighted result, or the
+      // full results page when nothing is highlighted yet.
+      if (typeaheadOpen()) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); typeaheadMove(1); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); typeaheadMove(-1); return; }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (typeaheadEnter()) return;
+        }
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // Without a card list (tool detail, 404, about…) typing used to do
+        // nothing at all. Enter now always opens the full results page, which
+        // searches the entire catalogue server-side.
+        var url = input.getAttribute('data-search-url');
+        var q = input.value.trim();
+        closeTypeahead();
+        if (url) {
+          input.blur();
+          window.location.href = q ? url + '?q=' + encodeURIComponent(q) : url;
+        } else {
+          input.blur();
+        }
+        return;
+      }
       if (e.key === 'Escape') {
+        closeTypeahead();
         input.value = '';
         searchInputs.forEach(function (o) { o.value = ''; });
         if (container) { state.q = ''; applyFilters(); }
       }
     });
+    // Reopen the popup when returning to a field that still holds a query.
+    input.addEventListener('focus', function () {
+      if (input.value.trim()) askTypeahead(input, input.value);
+    });
+    input.addEventListener('blur', function () {
+      // Let a click on a result land before the popup disappears.
+      setTimeout(closeTypeahead, 150);
+    });
+  });
+
+  /* ------------------------------------------------------------ typeahead */
+  /*
+   * The topbar field is on every page, but the card filter only ever worked
+   * where a card list existed. Typing now also opens a results popup fed by
+   * /api/search, so search works on a tool page, a 404, the about page — and it
+   * covers the whole catalogue rather than the ~9 cards a rail happens to show.
+   */
+  var ta = null;        // popup element
+  var taItems = [];     // clickable results
+  var taActive = -1;    // highlighted index
+  var taSeq = 0;        // guards against out-of-order responses
+  var taTimer;
+
+  function typeaheadOpen() { return !!(ta && ta.classList.contains('open')); }
+
+  function ensureTypeahead() {
+    if (ta) return ta;
+    ta = document.createElement('div');
+    ta.className = 'search-pop';
+    ta.setAttribute('role', 'listbox');
+    ta.hidden = true;
+    document.body.appendChild(ta);
+    // mousedown beats blur, so a click on a result is not swallowed.
+    ta.addEventListener('mousedown', function (e) {
+      var item = e.target.closest('.search-pop-item');
+      if (!item) return;
+      e.preventDefault();
+      window.location.href = item.getAttribute('href');
+    });
+    return ta;
+  }
+
+  function closeTypeahead() {
+    taSeq++;
+    clearTimeout(taTimer);
+    if (!ta) return;
+    ta.classList.remove('open');
+    ta.hidden = true;
+    taItems = [];
+    taActive = -1;
+  }
+
+  function typeaheadPosition(input) {
+    var box = ensureTypeahead();
+    var r = input.getBoundingClientRect();
+    // Anchor under the field, clamped to the viewport. On phones the popup
+    // stretches to the full width instead of following the input.
+    var narrow = window.innerWidth < 640;
+    var w = narrow ? window.innerWidth - 24 : Math.max(r.width, 340);
+    var left = narrow ? 12 : Math.min(r.left, window.innerWidth - w - 12);
+    box.style.width = w + 'px';
+    box.style.left = Math.max(12, left) + 'px';
+    box.style.top = (r.bottom + 8 + window.scrollY) + 'px';
+  }
+
+  function typeaheadMove(dir) {
+    if (!taItems.length) return;
+    taActive = (taActive + dir + taItems.length) % taItems.length;
+    for (var i = 0; i < taItems.length; i++) {
+      taItems[i].classList.toggle('active', i === taActive);
+    }
+    var el = taItems[taActive];
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** Enter inside the popup: open the highlighted row, or fall through. */
+  function typeaheadEnter() {
+    if (taActive >= 0 && taItems[taActive]) {
+      window.location.href = taItems[taActive].getAttribute('href');
+      return true;
+    }
+    return false;
+  }
+
+  function renderTypeahead(input, q, data) {
+    var box = ensureTypeahead();
+    var results = (data && data.results) || [];
+    var more = '';
+    if (!results.length) {
+      box.innerHTML = '<div class="search-pop-empty">'
+        + '<div class="search-pop-empty-title">' + escText(input.getAttribute('data-no-results') || 'No results') + '</div>'
+        + '</div>';
+      taItems = [];
+      taActive = -1;
+      typeaheadPosition(input);
+      box.hidden = false;
+      box.classList.add('open');
+      return;
+    }
+
+    var rows = results.slice(0, 8).map(function (r) {
+      var href = input.getAttribute('data-search-url');
+      // /search/<slug> is the tool page; build it from the current search URL's
+      // locale prefix so the popup stays inside the active language.
+      var prefix = href.replace(/\/search$/, '');
+      var url = prefix + '/tools/' + r.slug;
+      return '<a class="search-pop-item" role="option" href="' + escText(url) + '">'
+        + '<span class="search-pop-name">' + escText(r.name) + '</span>'
+        + (r.category ? '<span class="search-pop-cat">' + escText(r.category) + '</span>' : '')
+        + '</a>';
+    }).join('');
+
+    // "全部结果" is always last, so Enter with nothing highlighted opens it.
+    more = '<a class="search-pop-all" href="' + escText(input.getAttribute('data-search-url'))
+      + '?q=' + encodeURIComponent(q) + '">'
+      + escText(input.getAttribute('data-all-label') || 'View all results') + ' →</a>';
+
+    box.innerHTML = '<div class="search-pop-list">' + rows + '</div>' + more;
+    taItems = Array.prototype.slice.call(box.querySelectorAll('.search-pop-item'));
+    taActive = -1;
+    typeaheadPosition(input);
+    box.hidden = false;
+    box.classList.add('open');
+  }
+
+  function escText(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function askTypeahead(input, value) {
+    var q = (value || '').trim();
+    if (!q) { closeTypeahead(); return; }
+    var api = input.getAttribute('data-search-api');
+    if (!api) return;
+    clearTimeout(taTimer);
+    taTimer = setTimeout(function () {
+      var seq = ++taSeq;
+      fetch(api + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          // A newer keystroke has already asked: drop this answer.
+          if (seq !== taSeq) return;
+          if (!data) { closeTypeahead(); return; }
+          renderTypeahead(input, q, data);
+        })
+        .catch(function () { closeTypeahead(); });
+    }, 160);
+  }
+
+  // Keep the popup glued to the field it belongs to.
+  window.addEventListener('resize', function () {
+    if (typeaheadOpen()) {
+      var open = document.activeElement;
+      if (open && open.classList && open.classList.contains('js-search')) typeaheadPosition(open);
+    }
+  });
+  document.addEventListener('click', function (e) {
+    if (ta && !ta.contains(e.target) && !e.target.closest('.js-search')) closeTypeahead();
   });
 
   // Prefill from ?q=

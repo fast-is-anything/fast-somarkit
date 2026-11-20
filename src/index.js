@@ -17,11 +17,12 @@ import { sendClickToGa } from './lib/ga.js';
 import { gaDailySeries, isGaConfigured } from './lib/ga-report.js';
 import { storeUpload, deleteMedia, ACCEPT_ATTR, MAX_LABEL } from './lib/media.js';
 import { renderMarkdown } from './lib/markdown.js';
+import { matchTools } from './lib/search.js';
 import {
   localizeTool, localizeTools, localizeCategory, localizeCategories,
 } from './lib/localize.js';
 import { ICONS } from './lib/icons.js';
-import { homePage, toolPage, categoryPage, aboutPage, notFoundPage, submitPage, submitSuccessPage, toolCard, RAIL_PAGE_SIZE } from './templates/public.js';
+import { homePage, toolPage, categoryPage, aboutPage, notFoundPage, submitPage, submitSuccessPage, toolCard, searchPage, RAIL_PAGE_SIZE } from './templates/public.js';
 import {
   dashboardPage, toolsPage, toolFormPage, categoriesPage, categoryFormPage,
   auditPage, adminsPage, loginPage,
@@ -174,25 +175,14 @@ async function router(request, env, ctx) {
   // Public API: accepts an optional locale prefix (/zh/api/search) so the
   // client can request a language; unprefixed falls back to the default.
   if ((pubPath === '/api/search' || path === '/api/search') && method === 'GET') {
-    const q = (url.searchParams.get('q') || '').trim().toLowerCase();
+    const q = (url.searchParams.get('q') || '').trim();
     const tools = await loadPublished(env.DB, lang);
-    // Match every language regardless of the visitor's language: someone on the
-    // Japanese site may still search for a Chinese tool name and vice versa.
-    // Every `_<code>` column is included, so search coverage grows with the
-    // locale list instead of being pinned to en.
-    const haystack = (t) => {
-      const parts = [t.name, t.description, t.tags.join(' '), t.category_name];
-      LANGS.forEach((l, i) => {
-        if (i === 0) return;
-        parts.push(t[`name_${l.code}`], t[`description_${l.code}`], t[`tags_${l.code}`]);
-      });
-      return parts.filter(Boolean).join(' ').toLowerCase();
-    };
-    const results = (q ? tools.filter((t) => haystack(t).includes(q)) : tools)
-      .slice(0, 30).map((t) => ({
-        id: t.id, name: t.name, slug: t.slug, url: t.url,
-        description: t.description, category: t.category_name, pricing: t.pricing,
-      }));
+    // Same matcher the results page uses, so the popup and the page can never
+    // disagree about what "matches".
+    const results = matchTools(tools, q).slice(0, 30).map((t) => ({
+      id: t.id, name: t.name, slug: t.slug, url: t.url,
+      description: t.description, category: t.category_name, pricing: t.pricing,
+    }));
     return json({ query: q, count: results.length, results });
   }
 
@@ -254,6 +244,29 @@ async function router(request, env, ctx) {
   if (pubPath === '/' || pubPath === '/index.html') {
     return withLang(await renderHome(request, env, theme, lang, gaId, pubPath, pageFlags.unprefixed));
   }
+  /*
+   * Site search results page.
+   *
+   * The topbar field is part of every page, but filtering only ever worked where
+   * a card list existed (#toolsContainer). Pressing Enter now lands here, where
+   * the whole catalogue is searched server-side — including on tool detail,
+   * 404, about and submit pages.
+   */
+  if (pubPath === '/search') {
+    const q = (url.searchParams.get('q') || '').trim();
+    const [categories, counts, allTools] = await Promise.all([
+      loadCategories(env.DB, lang),
+      countToolsByCategory(env.DB),
+      loadPublished(env.DB, lang),
+    ]);
+    return withLang(searchPage({
+      q,
+      results: matchTools(allTools, q),
+      categories, counts, total: allTools.length,
+      theme, lang, gaId, basePath: pubPath, ...pageFlags,
+    }));
+  }
+
   if (pubPath === '/about') {
     const [categories, counts, tools] = await Promise.all([
       loadCategories(env.DB, lang),
