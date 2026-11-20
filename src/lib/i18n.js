@@ -115,6 +115,7 @@ const DICT = {
     'pricing.opensource': '开源',
 
     'card.review': '评测',
+    'card.opening': '正在前往',
     'card.visit': '访问',
     'card.noDesc': '暂无描述',
 
@@ -239,6 +240,7 @@ const DICT = {
     'pricing.opensource': 'Open source',
 
     'card.review': 'Review',
+    'card.opening': 'Opening…',
     'card.visit': 'Visit',
     'card.noDesc': 'No description yet',
 
@@ -363,6 +365,7 @@ const DICT = {
     'pricing.opensource': 'オープンソース',
 
     'card.review': 'レビュー',
+    'card.opening': '移動中…',
     'card.visit': '開く',
     'card.noDesc': '説明はまだありません',
 
@@ -487,6 +490,7 @@ const DICT = {
     'pricing.opensource': '오픈소스',
 
     'card.review': '리뷰',
+    'card.opening': '이동 중…',
     'card.visit': '열기',
     'card.noDesc': '아직 설명이 없습니다',
 

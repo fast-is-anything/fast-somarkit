@@ -411,7 +411,10 @@ export function toolCard(item, lang = DEFAULT_LANG) {
     <div class="tool-card-footer">
       <span class="pricing-tag pricing-${esc(item.pricing)}">${esc(pricingLabel(lang, item.pricing))}</span>
       <div class="tool-card-actions">
-        <a href="${esc(localePath(lang, `/tools/${item.slug}`))}" class="tool-detail-link" title="${esc(t(lang, 'card.review'))}">${esc(t(lang, 'card.review'))}</a>
+        <a href="${esc(localePath(lang, `/tools/${item.slug}`))}" class="tool-detail-link"
+          title="${esc(t(lang, 'card.review'))}"
+          data-label-resting="${esc(t(lang, 'card.review'))}"
+          data-loading-label="${esc(t(lang, 'card.opening'))}">${esc(t(lang, 'card.review'))}</a>
         <a href="${esc(item.url)}" target="_blank" rel="${outboundRel(item)}"
           class="tool-visit-btn" data-tool-id="${item.id}">${esc(t(lang, 'card.visit'))} <span class="arrow">→</span></a>
       </div>

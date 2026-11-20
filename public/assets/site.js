@@ -322,6 +322,33 @@
       return;
     }
 
+    /* The card's "review" button navigates to a tool page. Rendering that page
+       takes a moment on a cold cache, so the button reports progress instead of
+       looking inert: the label becomes "正在前往" next to a spinner, and the
+       navigation starts a couple of frames later so the new state paints. */
+    var detailLink = t.closest('a.tool-detail-link');
+    if (detailLink) {
+      // A second click while the first navigation is in flight must not queue
+      // another one.
+      if (detailLink.dataset.busy === '1') { e.preventDefault(); return; }
+      detailLink.dataset.busy = '1';
+
+      detailLink.classList.add('is-loading');
+      detailLink.setAttribute('aria-busy', 'true');
+      detailLink.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>'
+        + (detailLink.getAttribute('data-loading-label') || '');
+      // Lock to the size the longer label actually needs, measured after the
+      // swap, so the text is never clipped and the row stops moving.
+      detailLink.style.width = detailLink.getBoundingClientRect().width + 'px';
+
+      var href = detailLink.getAttribute('href');
+      e.preventDefault();
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { window.location.href = href; });
+      });
+      return;
+    }
+
     var pChip = t.closest('[data-pricing-filter]');
     if (pChip) {
       e.preventDefault();
@@ -623,4 +650,20 @@
     var initial = document.querySelector('.category-section[data-has-more="1"]');
     if (initial) arm(initial);
   })();
+
+  /* A back/forward navigation can restore this document from the bfcache with
+     the "review" button still in its loading state. Put every such button back
+     so the restored page looks normal. */
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return;
+    var links = document.querySelectorAll('a.tool-detail-link[data-busy="1"]');
+    for (var i = 0; i < links.length; i++) {
+      var a = links[i];
+      delete a.dataset.busy;
+      a.classList.remove('is-loading');
+      a.removeAttribute('aria-busy');
+      a.style.width = '';
+      a.textContent = a.getAttribute('data-label-resting') || a.textContent;
+    }
+  });
 })();

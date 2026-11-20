@@ -1063,7 +1063,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 
 /* Secondary action: slate fill with a visible outline (matches reference). */
 .tool-detail-link {
-  display: inline-flex; align-items: center;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
   height: 31px; padding: 5px 14px;
   font-size: 12px; font-weight: 500;
   color: var(--text-primary);
@@ -1074,6 +1074,29 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   white-space: nowrap;
 }
 .tool-detail-link:hover { background: var(--bg-tertiary); border-color: var(--text-primary); }
+
+/* While the detail page is loading the label swaps to "正在前往" with a spinner.
+   The button keeps its width (set inline by the click handler) so the row does
+   not reflow during the brief gap before the new document paints. */
+.tool-detail-link.is-loading {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+  cursor: default;
+  overflow: hidden;
+}
+.btn-spinner {
+  width: 10px; height: 10px; flex: 0 0 10px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin .6s linear infinite;
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+/* Respect users who asked for less motion: keep the label, drop the spin. */
+@media (prefers-reduced-motion: reduce) {
+  .btn-spinner { animation: none; border-right-color: currentColor; opacity: .5; }
+}
 
 /* Primary action: solid dark button, always visible. */
 .tool-visit-btn {
