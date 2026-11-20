@@ -528,11 +528,11 @@ table.ad-table {
    and let the flexible name column absorb the rest. */
 .ad-table-wrap[data-fixed-table] .ad-table td:last-child,
 .ad-table-wrap[data-fixed-table] .ad-table th:last-child { width: 120px; }
-/* A row with three actions (e.g. submissions: 璇︽儏 / 鏀跺綍 / 鎷掔粷) needs more
-   than the default 120px, otherwise the flex row is clipped by the cell's
-   overflow:hidden. */
+/* A row with more than two actions (tools: preview / edit / publish / delete,
+   submissions: detail / create / reject) needs more than the default 120px,
+   otherwise the flex row is clipped by the cell's overflow:hidden. */
 .ad-table-wrap[data-fixed-table] .ad-table.ad-table-wide-actions td:last-child,
-.ad-table-wrap[data-fixed-table] .ad-table.ad-table-wide-actions th:last-child { width: 210px; }
+.ad-table-wrap[data-fixed-table] .ad-table.ad-table-wide-actions th:last-child { width: 260px; }
 .ad-table-wrap[data-fixed-table] .ad-table th.cell-date,
 .ad-table-wrap[data-fixed-table] .ad-table td.ad-cell-date { width: 96px; }
 

@@ -196,9 +196,11 @@ const DICT = {
     'about.submitNote': '如需提交或纠正收录信息，请通过站点管理后台联系站长。',
 
     'notFound.title': '页面不存在 | SoMarkIt',
-    'notFound.h1': '这个工具还没有被标记',
-    'notFound.body': '页面不存在，或者工具已被移除。',
+    'notFound.h1': '页面走丢了',
+    'notFound.body': '这个页面不存在，或者对应的工具已经下架。试试从下面的分类重新找找，或者回到首页。',
     'notFound.back': '返回首页',
+    'notFound.browse': '浏览全部工具',
+    'notFound.suggest': '或者看看这些分类',
 
     'seo.homeTitle': 'SoMarkIt — 精选 AI 工具导航 | 让每个好工具被标记',
     'seo.siteDesc':
@@ -321,9 +323,11 @@ const DICT = {
     'about.submitNote': 'To submit or correct an entry, please contact the site owner through the admin console.',
 
     'notFound.title': 'Page not found | SoMarkIt',
-    'notFound.h1': 'This tool has not been marked yet',
-    'notFound.body': 'The page does not exist, or the tool has been removed.',
+    'notFound.h1': 'This page took a wrong turn',
+    'notFound.body': 'The page does not exist, or the tool has been taken offline. Try one of the categories below, or head back home.',
     'notFound.back': 'Back to home',
+    'notFound.browse': 'Browse all tools',
+    'notFound.suggest': 'Or start from a category',
 
     'seo.homeTitle': 'SoMarkIt — Curated AI Tool Directory',
     'seo.siteDesc':
@@ -446,9 +450,11 @@ const DICT = {
     'about.submitNote': '掲載のご依頼や情報の訂正は、管理画面から運営者までご連絡ください。',
 
     'notFound.title': 'ページが見つかりません | SoMarkIt',
-    'notFound.h1': 'このツールはまだ見つかっていません',
-    'notFound.body': 'ページが存在しないか、ツールが削除されています。',
+    'notFound.h1': 'ページが見つかりません',
+    'notFound.body': 'ページが存在しないか、ツールが非公開になっています。下のカテゴリから探すか、ホームへお戻りください。',
     'notFound.back': 'ホームへ戻る',
+    'notFound.browse': 'すべてのツールを見る',
+    'notFound.suggest': 'カテゴリから探す',
 
     'seo.homeTitle': 'SoMarkIt — 厳選された AI ツールディレクトリ',
     'seo.siteDesc':
@@ -571,9 +577,11 @@ const DICT = {
     'about.submitNote': '도구 제안이나 정보 수정은 관리자 콘솔을 통해 운영자에게 알려 주세요.',
 
     'notFound.title': '페이지를 찾을 수 없습니다 | SoMarkIt',
-    'notFound.h1': '아직 발견되지 않은 도구입니다',
-    'notFound.body': '페이지가 존재하지 않거나 도구가 삭제되었습니다.',
+    'notFound.h1': '페이지를 찾을 수 없습니다',
+    'notFound.body': '페이지가 존재하지 않거나 도구가 비공개로 전환되었습니다. 아래 카테고리에서 다시 찾아보시거나 홈으로 돌아가세요.',
     'notFound.back': '홈으로 돌아가기',
+    'notFound.browse': '모든 도구 보기',
+    'notFound.suggest': '카테고리에서 찾아보기',
 
     'seo.homeTitle': 'SoMarkIt — 엄선한 AI 도구 디렉터리',
     'seo.siteDesc':

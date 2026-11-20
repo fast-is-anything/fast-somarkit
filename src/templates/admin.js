@@ -304,6 +304,15 @@ export function toolsPage({ user, env, tools, total, page, perPage, pages, q, ca
       <div class="ad-cell-actions">
         <a class="ad-btn ad-btn-sm ad-btn-ghost" href="/tools/${esc(t.slug)}" target="_blank" rel="noopener" title="预览">${UI.externalLink}</a>
         <a class="ad-btn ad-btn-sm" href="/admin/tools/${t.id}/edit">${UI.edit}编辑</a>
+        ${t.status === 'published'
+          // Taking a tool offline keeps the record; the public URL starts
+          // returning 404 until it is published again.
+          ? `<form method="post" action="/admin/tools/${t.id}/unpublish" data-confirm="下架「${esc(t.name)}」？下架后前台页面会返回 404，但不会删除数据。">
+               <button class="ad-btn ad-btn-sm" type="submit" title="下架">${UI.download}下架</button>
+             </form>`
+          : `<form method="post" action="/admin/tools/${t.id}/publish">
+               <button class="ad-btn ad-btn-sm ad-btn-primary" type="submit" title="重新上架">${UI.upload}上架</button>
+             </form>`}
         <form method="post" action="/admin/tools/${t.id}/delete" data-confirm="确定要删除「${esc(t.name)}」吗？此操作不可恢复。">
           <button class="ad-btn ad-btn-sm ad-btn-danger" type="submit" title="删除">${UI.trash}</button>
         </form>
@@ -342,7 +351,7 @@ export function toolsPage({ user, env, tools, total, page, perPage, pages, q, ca
         <a class="ad-btn ad-btn-primary" href="/admin/tools/new">${UI.plus}新增工具</a>
       </div>
       <div class="ad-table-wrap" data-fixed-table>
-        <table class="ad-table">
+        <table class="ad-table ad-table-wide-actions">
           <thead><tr>
             <th>工具</th><th>分类</th><th>定价</th><th>标记</th><th>状态</th>
             <th class="num">访问</th><th>更新</th><th></th>
@@ -449,7 +458,7 @@ function listHref(base, params = {}) {
 
 // --- tool form --------------------------------------------------------------
 
-export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
+export function toolFormPage({ user, env, tool, categories, flash, isNew, submissionId = null }) {
   const t = tool || {};
   const opts = categories.map((c) => `<option value="${c.id}" ${String(c.id) === String(t.category_id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
   const priceOpts = Object.entries(PRICING).map(([k, v]) =>
@@ -460,6 +469,10 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
   const children = `
     ${flash ? `<div class="ad-alert ad-alert-${esc(flash.type)}" id="adFlash" data-message="1">${esc(flash.message)}</div>` : ''}
     <form method="post" action="${isNew ? '/admin/tools' : `/admin/tools/${t.id}`}">
+      ${submissionId ? `<input type="hidden" name="submission_id" value="${esc(String(submissionId))}">` : ''}
+      ${submissionId ? `<div class="ad-alert ad-alert-info" style="margin-bottom:16px">
+        本表单已带入访客提交的内容。补充分类、Logo、评测等信息后保存，工具才会发布；保存后对应提交会标记为「已处理」。
+      </div>` : ''}
       <div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px" class="form-grid">
         <div>
         <div class="ad-card">
@@ -518,7 +531,7 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew }) {
               ${LANGS.map((l, i) => `<input class="ad-input" data-lang-field="${esc(l.code)}"
                 id="${i === 0 ? 'tags' : `tags_${l.code}`}" name="${i === 0 ? 'tags' : `tags_${l.code}`}"
                 ${i === 0 ? '' : 'hidden'}
-                value="${esc(i === 0 ? (t.tags || []).join(', ') : (t[`tags_${l.code}`] || ''))}"
+                value="${esc(i === 0 ? tagList(t.tags) : (t[`tags_${l.code}`] || ''))}"
                 placeholder="${esc(i === 0 ? '对话, 写作, 多模态' : `${l.label} 标签，用逗号分隔（选填）`)}">`).join('')}
               <div class="ad-hint">用英文逗号分隔，最多显示 4 个。其他语言留空则沿用中文标签。</div>
             </div>
@@ -1304,6 +1317,19 @@ export function adminsPage({ user, env, admins, allowList, total = 0, page = 1, 
 
 // --- helpers ----------------------------------------------------------------
 
+/**
+ * Normalise a tool's tags into an editable "a, b, c" string.
+ *
+ * The DB row carries an array (rowToTool splits it), but a value built on the
+ * fly — e.g. the pre-fill for a tool created from a visitor submission — may
+ * still be the raw comma-separated string. Accept both so a partial object can
+ * never crash the form.
+ */
+function tagList(raw) {
+  if (Array.isArray(raw)) return raw.join(', ');
+  return String(raw || '');
+}
+
 function pillTool(pricing) {
   const map = {
     free: ['ad-pill-green', '免费'],
@@ -1397,10 +1423,11 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
 
   /* Buttons shown inside the popup, mirroring the row actions. */
   const detailActions = (s) => {
+    const createLink = (primary) =>
+      `<a class="ad-btn${primary ? ' ad-btn-primary' : ''}" href="/admin/tools/new?from=${s.id}">${UI.plus}创建工具</a>`;
+
     if (s.status === 'pending') {
-      return `<form method="post" action="/admin/submissions/${s.id}/approve">
-          <button class="ad-btn ad-btn-primary" type="submit">${UI.check}收录</button>
-        </form>
+      return `${createLink(true)}
         <form method="post" action="/admin/submissions/${s.id}/reject" data-confirm="拒绝「${esc(s.name)}」的提交？">
           <button class="ad-btn ad-btn-danger" type="submit">拒绝</button>
         </form>`;
@@ -1411,9 +1438,7 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
           <button class="ad-btn ad-btn-danger" type="submit">${UI.trash}删除记录</button>
         </form>`;
     }
-    return `<form method="post" action="/admin/submissions/${s.id}/approve">
-        <button class="ad-btn ad-btn-primary" type="submit">改为收录</button>
-      </form>
+    return `${createLink(false)}
       <form method="post" action="/admin/submissions/${s.id}/delete" data-confirm="删除这条提交记录？">
         <button class="ad-btn ad-btn-danger" type="submit">${UI.trash}删除记录</button>
       </form>`;
@@ -1425,10 +1450,15 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
     const openBtn = `<button class="ad-btn ad-btn-sm" type="button" data-sub-open="${s.id}"
       title="查看提交详情">${UI.search}详情</button>`;
 
+    // "创建工具" opens the new-tool form pre-filled from this submission. The
+    // tool is only published when that form is saved — nothing here publishes.
+    const createBtn = (primary) =>
+      `<a class="ad-btn ad-btn-sm${primary ? ' ad-btn-primary' : ''}"
+        href="/admin/tools/new?from=${s.id}"
+        title="带入这条提交的内容，去补充信息并发布">${UI.plus}创建工具</a>`;
+
     const actions = s.status === 'pending'
-      ? `<form method="post" action="/admin/submissions/${s.id}/approve" style="display:inline">
-           <button class="ad-btn ad-btn-sm ad-btn-primary" type="submit" title="通过并收录">${UI.check}收录</button>
-         </form>
+      ? `${createBtn(true)}
          <form method="post" action="/admin/submissions/${s.id}/reject" style="display:inline"
            data-confirm="拒绝「${esc(s.name)}」的提交？">
            <button class="ad-btn ad-btn-sm ad-btn-danger" type="submit">拒绝</button>
@@ -1439,9 +1469,7 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
              data-confirm="删除这条提交记录？（不会删除已收录的工具）">
              <button class="ad-btn ad-btn-sm ad-btn-danger" type="submit">${UI.trash}</button>
            </form>`
-        : `<form method="post" action="/admin/submissions/${s.id}/approve" style="display:inline">
-             <button class="ad-btn ad-btn-sm" type="submit">改为收录</button>
-           </form>
+        : `${createBtn(false)}
            <form method="post" action="/admin/submissions/${s.id}/delete" style="display:inline"
              data-confirm="删除这条提交记录？">
              <button class="ad-btn ad-btn-sm ad-btn-danger" type="submit">${UI.trash}</button>
@@ -1486,8 +1514,8 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
         <span class="spacer"></span>
         <!-- Explanation moved into the header so the table keeps the same
              height as every other list page. -->
-        <div class="ad-head-note" title="访客通过前台「提交工具」表单提交的内容会先进入这里。点「收录」会把该工具直接发布到站点（若同名或同链接已存在，则关联到已有工具）。">
-          <span class="ad-head-note-label">收录</span>会把工具直接发布到站点
+        <div class="ad-head-note" title="访客通过前台「提交工具」表单提交的内容会先进入这里。点「创建工具」会把这些内容带入新建工具表单，补充完成后保存才会发布。">
+          <span class="ad-head-note-label">创建工具</span>会带入提交内容，保存后才发布
         </div>
       </div>
       <div class="ad-table-wrap" data-fixed-table>
@@ -1615,9 +1643,11 @@ export function submissionDetailPage({ user, env, s, flash }) {
           <div class="ad-card-head"><h2>处理</h2></div>
           <div class="ad-card-body">
             ${s.status === 'pending' ? `
-              <form method="post" action="/admin/submissions/${s.id}/approve" style="margin-bottom:10px">
-                <button class="ad-btn ad-btn-primary" type="submit" style="width:100%">${UI.check}通过并收录</button>
-              </form>
+              <a class="ad-btn ad-btn-primary" href="/admin/tools/new?from=${s.id}"
+                style="width:100%;margin-bottom:10px">${UI.plus}创建工具</a>
+              <p style="font-size:12px;color:var(--ad-text-3);margin:0 0 12px">
+                会带入提交内容，补充信息并保存后才发布到站点。
+              </p>
               <form method="post" action="/admin/submissions/${s.id}/reject">
                 <div class="ad-field">
                   <label for="reason">拒绝理由（选填）</label>
@@ -1630,9 +1660,7 @@ export function submissionDetailPage({ user, env, s, flash }) {
                 style="width:100%;margin-bottom:10px">${UI.externalLink}查看已收录页面</a>
               <a class="ad-btn" href="/admin/tools/${s.tool_id}/edit" style="width:100%">${UI.edit}编辑工具</a>
             ` : `<p style="font-size:13px;color:var(--ad-text-3);margin:0 0 12px">该提交已被拒绝。</p>
-              <form method="post" action="/admin/submissions/${s.id}/approve">
-                <button class="ad-btn" type="submit" style="width:100%">改为收录</button>
-              </form>`}
+              <a class="ad-btn" href="/admin/tools/new?from=${s.id}" style="width:100%">${UI.plus}创建工具</a>`}
             <form method="post" action="/admin/submissions/${s.id}/delete" style="margin-top:12px"
               data-confirm="删除这条提交记录？">
               <button class="ad-btn ad-btn-ghost ad-btn-sm" type="submit" style="width:100%">${UI.trash}删除记录</button>

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   SoMarkIt — design system
+   SoMarkIt 鈥?design system
    Inspired by the warm-neutral, information-dense directory aesthetic.
    ========================================================================== */
 
@@ -249,7 +249,7 @@ img { max-width: 100%; }
 [data-theme="dark"] .category-item.active { background: var(--bg-tertiary); }
 
 /* ==========================================================================
-   Page loader — covers the main column (content + topbar), keeps the rail.
+   Page loader 鈥?covers the main column (content + topbar), keeps the rail.
    Fixed to the viewport so its size never depends on how tall the current
    page happens to be; the flyer always sits in the same place on screen.
    ========================================================================== */
@@ -692,7 +692,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   font-weight: 800;
   color: var(--hero-text);
 }
-/* Title renders on two explicit lines: "每个好工具，" / "都值得被标记". */
+/* Title renders on two explicit lines: "姣忎釜濂藉伐鍏凤紝" / "閮藉€煎緱琚爣璁?. */
 .hero-title-line { display: block; }
 .gradient-text { color: inherit; }
 [data-theme="dark"] .gradient-text { color: inherit; }
@@ -705,7 +705,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   max-width: 100%;
 }
 
-/* Search: a single pill — grey fill, 16px radius, black round submit button. */
+/* Search: a single pill 鈥?grey fill, 16px radius, black round submit button. */
 .hero-search { margin-bottom: 16px; }
 .hero-search-wrapper {
   position: relative;
@@ -731,7 +731,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   flex: 1 1 auto;
   /* Without min-width:0 a flex item refuses to shrink below its intrinsic
      width (~275px for a text input), so on narrow phones it pushes the submit
-     button outside the rounded container — which reads as a white block
+     button outside the rounded container 鈥?which reads as a white block
      covering the right side of the field. */
   min-width: 0;
   width: 100%;
@@ -786,7 +786,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   min-width: 0;
 }
 
-/* Feature card: solid brand colour, label pills. Text-only by design — the
+/* Feature card: solid brand colour, label pills. Text-only by design 鈥?the
    logo lives on the product cards below, so these stay a name-first rail. */
 .hero-agent-card {
   position: relative;
@@ -965,7 +965,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 .tool-info { min-width: 0; flex: 1; }
 
 /* Product logo. A fixed square keeps the card grid aligned whether a tool
-   ships a square app icon or a wide wordmark — the image is letterboxed with
+   ships a square app icon or a wide wordmark 鈥?the image is letterboxed with
    `contain` instead of being cropped, so neither shape loses pixels. */
 .logo-tile {
   display: grid; place-items: center;
@@ -1000,7 +1000,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   color: var(--text-primary);
   display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap;
 }
-/* Kept for the detail page only — cards are text-first, like the reference. */
+/* Kept for the detail page only 鈥?cards are text-first, like the reference. */
 .tool-host { font-size: var(--text-xs); color: var(--text-tertiary); }
 
 .badge {
@@ -1075,7 +1075,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 }
 .tool-detail-link:hover { background: var(--bg-tertiary); border-color: var(--text-primary); }
 
-/* While the detail page is loading the label swaps to "正在前往" with a spinner.
+/* While the detail page is loading the label swaps to "姝ｅ湪鍓嶅線" with a spinner.
    The button keeps its width (set inline by the click handler) so the row does
    not reflow during the brief gap before the new document paints. */
 .tool-detail-link.is-loading {
@@ -1138,7 +1138,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   display: flex;
   justify-content: flex-start;
 }
-/* Legal footnote under the CTA. Deliberately quiet — small and muted — so it
+/* Legal footnote under the CTA. Deliberately quiet 鈥?small and muted 鈥?so it
    never competes with the button. The divider above the CTA already separates
    this block from the article, so there is no second rule here. */
 .detail-disclaimer {
@@ -1156,7 +1156,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
    -------------------------------------------------------------------------- */
 /* Long-form review.
    It now lives INSIDE .detail-card (product info and the article read as one
-   card), so it carries no card chrome of its own — just body typography. */
+   card), so it carries no card chrome of its own 鈥?just body typography. */
 .detail-review {
   font-size: var(--text-base);
   line-height: 1.85;
@@ -1288,7 +1288,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   font-size: var(--text-sm); color: var(--text-tertiary);
 }
 /* --------------------------------------------------------------------------
-   Profile card (::: person name=… role=… avatar=…)
+   Profile card (::: person name=鈥?role=鈥?avatar=鈥?
    A compact author/identity card: avatar, name, role, then free Markdown.
    -------------------------------------------------------------------------- */
 .detail-review .md-person { padding: 0; overflow: hidden; }
@@ -1373,7 +1373,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
   .tool-info-grid { grid-template-columns: 1fr; gap: 8px; }
   .tool-info-card { padding: 12px 14px; }
 }
-/* Detail header — two rows:
+/* Detail header 鈥?two rows:
      row 1: [avatar] [name + badges]     (vertically centred together)
      row 2: meta row spanning full width, starting at the avatar's edge
    The first column is sized to the avatar itself (max-content) so the title
@@ -1382,7 +1382,7 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
    push the name to the middle. */
 .detail-head {
   display: grid;
-  /* Fixed avatar column (56px) — `max-content`/`auto` would be stretched by
+  /* Fixed avatar column (56px) 鈥?`max-content`/`auto` would be stretched by
      the spanning meta row and push the name towards the middle. */
   grid-template-columns: 56px minmax(0, 1fr);
   grid-template-areas:
@@ -1432,11 +1432,11 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 .detail-meta a:hover { color: var(--text-primary); }
 .detail-meta .pricing-tag { margin-right: 2px; }
 /* Each item owns its leading separator. When the row wraps, the item that
-   starts a line keeps a "·" that would look orphaned — so on narrow widths we
+   starts a line keeps a "路" that would look orphaned 鈥?so on narrow widths we
    drop the separators and let the chips wrap on their own instead. */
 .detail-meta-item { display: inline-flex; align-items: center; }
 .detail-meta-item::before {
-  content: '·';
+  content: '路';
   opacity: .5;
   user-select: none;
   margin-right: 8px;
@@ -1635,7 +1635,7 @@ select.form-input:focus { background-color: var(--bg-primary); }
   font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
-/* Honeypot — hidden from humans, still submittable by naive bots. */
+/* Honeypot 鈥?hidden from humans, still submittable by naive bots. */
 .hp-field {
   position: absolute;
   left: -9999px;
@@ -1676,4 +1676,94 @@ select.form-input:focus { background-color: var(--bg-primary); }
   .lang-toggle > svg:first-child { display: none; }
   /* A 40px tile would eat a third of the title line at this width. */
   .tool-card-logo { width: 34px; height: 34px; font-size: 12px; }
+}
+
+/* --------------------------------------------------------------------------
+   404 page.
+   A dead end should still look like the site: a large fading "404", a short
+   explanation, two exits and a row of category shortcuts.
+   -------------------------------------------------------------------------- */
+.nf {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 64px 0 40px;
+  text-align: center;
+}
+.nf-art {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+/* The illustration is wide (1792×1024), so cap it by width and let the height
+   follow, with a smaller size on phones. */
+.nf-svg {
+  width: min(320px, 72%);
+  height: auto;
+  display: block;
+}
+/* The art is pure greyscale, so a brightness lift (not an inversion, which
+   would darken the mid-greys) carries it onto the dark background while keeping
+   the relative shading. */
+[data-theme="dark"] .nf-svg { filter: brightness(1.55); opacity: .92; }
+.nf-title {
+  margin: 0 0 10px;
+  font-size: clamp(20px, 3vw, 26px);
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--text-primary);
+}
+.nf-text {
+  margin: 0 auto 26px;
+  max-width: 460px;
+  font-size: var(--text-base);
+  line-height: 1.75;
+  color: var(--text-tertiary);
+}
+.nf-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.nf-btn { height: 40px; padding: 0 20px; font-size: var(--text-sm); }
+
+/* A rule with the hint text sitting in the middle. */
+.nf-divider {
+  display: flex; align-items: center; gap: 14px;
+  margin: 40px 0 18px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+.nf-divider::before,
+.nf-divider::after {
+  content: ''; flex: 1; height: 1px;
+  background: var(--border-color);
+}
+.nf-chips {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+}
+.nf-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+.nf-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+}
+.nf-chip-icon { display: inline-flex; color: var(--text-tertiary); }
+.nf-chip:hover .nf-chip-icon { color: var(--text-primary); }
+
+@media (max-width: 640px) {
+  .nf { padding: 40px 0 24px; }
+  .nf-svg { width: min(240px, 84%); }
+  .nf-chips { gap: 6px; }
+  .nf-chip { padding: 7px 12px; font-size: 12.5px; }
 }

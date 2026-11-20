@@ -5,13 +5,13 @@
 import { esc, json, redirect, getCookie, setCookie, sign, secureIfHttps } from './lib/crypto.js';
 import {
   listCategories, listCategoriesPage, countToolsByCategory, listPublishedTools, listFeaturedTools, listToolsPage, listTrendingTools,
-  getToolBySlug, getTool, listToolsAdmin, createTool, updateTool, deleteTool,
+  getToolBySlug, getTool, listToolsAdmin, createTool, updateTool, deleteTool, setToolStatus,
   incrementVisits, getCategoryBySlug, getCategory, createCategory, updateCategory,
   deleteCategory, slugify, logAudit, listAudit, listAuditPage, dashboardStats, topTools,
   listAdmins, listAdminsPage, setAdminActive, deleteAuditLog, findAdminByEmail,
   recordClick, analyticsSummary,
   createSubmission, recentSubmissionCount, listSubmissionsAdmin, countSubmissionsByStatus,
-  getSubmission, approveSubmission, rejectSubmission, deleteSubmission,
+  getSubmission, linkSubmissionToTool, rejectSubmission, deleteSubmission,
 } from './lib/db.js';
 import { sendClickToGa } from './lib/ga.js';
 import { gaDailySeries, isGaConfigured } from './lib/ga-report.js';
@@ -292,7 +292,10 @@ async function router(request, env, ctx) {
   if (pubPath.startsWith('/tools/')) {
     const slug = pubPath.slice(7);
     const tool = await loadToolBySlug(env.DB, lang, slug);
-    if (tool && tool.status !== 'draft') {
+    // Only a published tool has a public page. Taking one offline (draft) or
+    // archiving it must make the URL 404 rather than keep serving a page the
+    // listings no longer link to.
+    if (tool && tool.status === 'published') {
       const [categories, counts, allTools] = await Promise.all([
         loadCategories(env.DB, lang),
         countToolsByCategory(env.DB),
@@ -683,7 +686,28 @@ async function adminGet(env, ctx, request, path, url, user) {
 
   if (path === '/admin/tools/new') {
     const categories = await listCategories(env.DB, { includeHidden: true });
-    return html(toolFormPage({ user, env, tool: null, categories, flash, isNew: true }));
+    // Created from a visitor submission? Pre-fill what they wrote; the admin
+    // completes the rest and saving is what actually publishes the tool.
+    const fromId = Number(url.searchParams.get('from') || 0);
+    const submission = fromId ? await getSubmission(env.DB, fromId) : null;
+    const prefill = submission
+      ? {
+          name: submission.name || '',
+          url: submission.url || '',
+          description: submission.description || '',
+          // The form expects an array (it renders `.join(', ')`); the column is
+          // a comma separated string.
+          tags: String(submission.tags || '')
+            .split(/[,，]/).map((s) => s.trim()).filter(Boolean),
+          pricing: submission.pricing || 'free',
+          category_id: submission.category_id || null,
+          status: 'published',
+        }
+      : null;
+    return html(toolFormPage({
+      user, env, tool: prefill, categories, flash, isNew: true,
+      submissionId: submission ? submission.id : null,
+    }));
   }
 
   let m = path.match(/^\/admin\/tools\/(\d+)\/edit$/);
@@ -843,6 +867,17 @@ async function adminPost(env, ctx, request, path, url, user) {
         source: 'admin',
       });
       await logAudit(env.DB, user.email, 'tool.create', 'tool', id, name);
+
+      // If this form was opened from a visitor submission, record that it has
+      // been handled and point the submission at the new tool.
+      const subId = Number(b.submission_id || 0);
+      if (subId) {
+        await linkSubmissionToTool(env.DB, subId, id, user.email, '由提交创建');
+        await logAudit(env.DB, user.email, 'submission.link', 'submission', subId,
+          `${name} → tool#${id}`);
+        return redirect(`/admin/tools?ok=${encodeURIComponent(`已创建「${name}」，对应提交已标记为已处理`)}`);
+      }
+
       return redirect(`/admin/tools?ok=${encodeURIComponent(`已创建「${name}」`)}`);
     } catch (e) {
       return redirect(`/admin/tools/new?err=${encodeURIComponent(e.message)}`);
@@ -890,6 +925,22 @@ async function adminPost(env, ctx, request, path, url, user) {
     } catch (e) {
       return redirect(`/admin/tools/${id}/edit?err=${encodeURIComponent(e.message)}`);
     }
+  }
+
+  // Take a tool offline / put it back. The row keeps its content; only the
+  // published flag changes, so the public page and listings follow.
+  m = path.match(/^\/admin\/tools\/(\d+)\/(publish|unpublish)$/);
+  if (m) {
+    const id = Number(m[1]);
+    const action = m[2];
+    const t = await getTool(env.DB, id);
+    if (!t) return redirect(`/admin/tools?err=${encodeURIComponent('工具不存在')}`);
+    const next = action === 'publish' ? 'published' : 'draft';
+    await setToolStatus(env.DB, id, next);
+    await logAudit(env.DB, user.email, `tool.${action}`, 'tool', id, t.name);
+    return redirect(`/admin/tools?ok=${encodeURIComponent(
+      `${action === 'publish' ? '已上架' : '已下架'}「${t.name}」`
+    )}`);
   }
 
   m = path.match(/^\/admin\/tools\/(\d+)\/delete$/);
@@ -964,22 +1015,16 @@ async function adminPost(env, ctx, request, path, url, user) {
   }
 
   // submissions ---------------------------------------------------------
-  let subPost = path.match(/^\/admin\/submissions\/(\d+)\/(approve|reject|delete)$/);
+  // A submission is never published straight from the list. "Creating" opens
+  // the tool form pre-filled with what the visitor wrote; the admin completes
+  // and saves it, and that save marks the submission as handled.
+  let subPost = path.match(/^\/admin\/submissions\/(\d+)\/(reject|delete)$/);
   if (subPost) {
     const id = Number(subPost[1]);
     const action = subPost[2];
     const s = await getSubmission(env.DB, id);
     if (!s) {
       return redirect(`/admin/submissions?err=${encodeURIComponent('提交记录不存在')}`);
-    }
-
-    if (action === 'approve') {
-      const { toolId, existed } = await approveSubmission(env.DB, s, user.email);
-      await logAudit(env.DB, user.email, 'submission.approve', 'submission', id,
-        `${s.name} → tool#${toolId}${existed ? '（已存在）' : ''}`);
-      return redirect(
-        `/admin/submissions?ok=${encodeURIComponent(existed ? `「${s.name}」已存在，已关联` : `已收录「${s.name}」`)}`
-      );
     }
 
     if (action === 'reject') {

@@ -440,6 +440,22 @@ export async function deleteTool(db, id) {
   await db.prepare('DELETE FROM tools WHERE id = ?').bind(id).run();
 }
 
+/**
+ * Take a tool offline / put it back, without touching its content.
+ *
+ * `draft` is the "下架" state: the row keeps every field, but the public queries
+ * all filter on `status = 'published'`, so the page, its sitemap entry and its
+ * place in the listings disappear until it is published again.
+ */
+export async function setToolStatus(db, id, status) {
+  const value = ['published', 'draft', 'archived'].includes(status) ? status : 'draft';
+  await db
+    .prepare('UPDATE tools SET status = ?, updated_at = ? WHERE id = ?')
+    .bind(value, now(), id)
+    .run();
+  return value;
+}
+
 export async function incrementVisits(db, id) {
   await db.prepare('UPDATE tools SET visit_count = visit_count + 1 WHERE id = ?').bind(id).run();
 }
@@ -797,50 +813,23 @@ export async function rejectSubmission(db, id, reviewer, reason = '') {
 }
 
 /**
- * Approve a submission: create the tool, then link the submission to it.
- * Returns the new tool id (or an existing one if the URL was already listed).
+ * Mark a submission as handled and link it to the tool the admin created.
+ *
+ * Publishing is a deliberate, separate step: the admin opens the new-tool form
+ * pre-filled from the submission, completes the missing fields (category, logo,
+ * review…) and saves. This only records the outcome — it never creates or
+ * publishes a tool itself.
  */
-export async function approveSubmission(db, submission, reviewer, overrides = {}) {
-  const existing = await db
-    .prepare('SELECT id FROM tools WHERE url = ? OR name = ? LIMIT 1')
-    .bind(submission.url, submission.name)
-    .first();
-
-  let toolId;
-  if (existing) {
-    toolId = existing.id;
-  } else {
-    let slug = slugify(overrides.slug || submission.name);
-    const clash = await db.prepare('SELECT id FROM tools WHERE slug = ?').bind(slug).first();
-    if (clash) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
-
-    toolId = await createTool(db, {
-      slug,
-      name: submission.name,
-      url: submission.url,
-      description: submission.description || '',
-      category_id: submission.category_id || null,
-      tags: submission.tags || '',
-      pricing: submission.pricing || 'free',
-      logo_url: '',
-      is_hot: false,
-      is_new: true,     // newly accepted submissions are flagged as new
-      is_featured: false,
-      status: 'published',
-      sort_order: 0,
-      source: `submission#${submission.id}`,
-    });
-  }
-
+export async function linkSubmissionToTool(db, id, toolId, reviewer, note = '') {
   await db
     .prepare(
-      `UPDATE submissions SET status = 'approved', tool_id = ?, review_note = ?,
-        reviewed_at = ?, reviewed_by = ? WHERE id = ?`
+      `UPDATE submissions
+         SET status = 'approved', tool_id = ?, reviewed_at = datetime('now'),
+             reviewed_by = ?, review_note = ?
+       WHERE id = ?`
     )
-    .bind(toolId, overrides.review_note || '', now(), reviewer, submission.id)
+    .bind(toolId ?? null, reviewer || '', note || '', id)
     .run();
-
-  return { toolId, existed: Boolean(existing) };
 }
 
 export async function deleteSubmission(db, id) {
