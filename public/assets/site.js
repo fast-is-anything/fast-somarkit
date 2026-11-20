@@ -496,7 +496,9 @@
     taSeq++;
     clearTimeout(taTimer);
     if (!ta) return;
-    ta.classList.remove('open');
+    // Dropping `loading` too: a closed popup that still carries it would keep
+    // the shimmer class around for the next open.
+    ta.classList.remove('open', 'loading');
     ta.hidden = true;
     taItems = [];
     taActive = -1;
