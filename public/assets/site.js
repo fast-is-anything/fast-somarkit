@@ -235,18 +235,6 @@
     }
   }
 
-  function setCategory(cat) {
-    state.category = cat;
-    var items = document.querySelectorAll('.category-item');
-    for (var i = 0; i < items.length; i++) {
-      items[i].classList.toggle('active', items[i].getAttribute('data-category') === cat);
-    }
-    applyFilters();
-    // The newly shown section may still have cards to pull in; the rail module
-    // attaches its sentinel on demand.
-    if (window.__railSync) window.__railSync();
-  }
-
   function setPricing(p) {
     state.pricing = p;
     var chips = document.querySelectorAll('[data-pricing-filter]');
@@ -328,32 +316,26 @@
       var langPrefix = (location.pathname.match(LOCALE_RE) || [''])[0];
       var target = cat === 'all' ? (langPrefix || '/') : langPrefix + '/' + encodeURIComponent(cat);
 
-      // Every listing page ships the full catalogue, so switching category is
-      // always a client-side view change: no navigation, no loader, no wait.
-      // Pages without a listing (tool detail, about, 404) still navigate.
-      if (container) {
-        e.preventDefault();
-        withScrollAnchor(function () { setCategory(cat); });
-        document.body.classList.remove('sidebar-open');
-        syncTopbarToggle();
-        // Keep the address bar shareable without reloading the document.
-        if (window.history && window.history.pushState) {
-          try { window.history.pushState({ cat: cat }, '', target); } catch (err) { /* ignore */ }
-        }
-        document.title = cat === 'all'
-          ? BASE_TITLE
-          : (catEl.querySelector('.cat-name') || {}).textContent + ' — SoMarkIt';
-      } else {
-        e.preventDefault();
-        markCategorySelected(cat);
-        document.body.classList.remove('sidebar-open');
-        syncTopbarToggle();
-        setContentLoading(true);
-        // Two frames so the rail selection and the loader paint first.
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () { window.location.href = target; });
-        });
-      }
+      // A category switch is always a real navigation.
+      //
+      // Switching in place used to be a client-side view change, but the views
+      // do not share content any more: the "all" view is a fixed preview of nine
+      // cards per rail while an open category page streams the rest. Sharing one
+      // DOM meant cards streamed into a category stayed behind when the reader
+      // went back to "all", so rails ended up with different lengths. A fresh
+      // document per view makes that impossible.
+      //
+      // The rail is highlighted and the loader faded in first, so the click
+      // feels immediate even though a navigation is coming.
+      e.preventDefault();
+      markCategorySelected(cat);
+      document.body.classList.remove('sidebar-open');
+      syncTopbarToggle();
+      setContentLoading(true);
+      // Two frames so the rail selection and the loader paint first.
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { window.location.href = target; });
+      });
       return;
     }
 
@@ -368,10 +350,11 @@
     if (clearBtn) {
       e.preventDefault();
       withScrollAnchor(function () {
+        // Clears search and price only. The category is a page, not a filter,
+        // so it stays where the reader is.
         state.q = '';
         var inputs = document.querySelectorAll('.js-search');
         for (var i = 0; i < inputs.length; i++) inputs[i].value = '';
-        setCategory('all');
         setPricing('all');
       });
       return;
@@ -413,7 +396,8 @@
       debounce = setTimeout(function () {
         if (container) {
           state.q = v;
-          if (v) setCategory('all');
+          // Searching must not widen the view: on a category page it filters
+          // that category, it does not reveal every other one.
           applyFilters();
         }
       }, 110);
@@ -548,26 +532,17 @@
    *
    *   - The homepage renders every rail as a fixed preview and marks nothing,
    *     so nothing here ever runs.
-   *   - A category page records the catalogue size in data-total and the
-   *     rendered size in data-rendered. Once a section is the one being viewed,
-   *     a sentinel under its grid pulls the remaining pages.
+   *   - A category page marks its own section with data-paginate and
+   *     data-has-more; a sentinel under that grid pulls the remaining pages.
    *
-   * "Being viewed" is not fixed at load time: switching categories is a
-   * client-side operation, so whichever section is active gets a sentinel
-   * attached on demand. Each section keeps its own cursor/done state on the
-   * element, so loading one never affects another and re-visiting a section
-   * never re-appends cards.
+   * Only ever one section qualifies, because switching category is a real
+   * navigation. That is what keeps the two views from sharing state: the "all"
+   * view can never inherit cards that a category streamed in.
    */
   (function initRail() {
     if (!('IntersectionObserver' in window)) return;
 
-    /*
-     * A section is paginable only when it declares data-paginate="1". The
-     * server sets that for the category page's active section only — the
-     * homepage marks nothing, so nothing here ever runs there. Without this
-     * guard syncActive() would attach sentinels to every visible homepage rail
-     * and turn the fixed previews into infinite lists.
-     */
+    /* A section paginates only when the server says so. */
     function paginable(sec) {
       return sec && sec.getAttribute('data-paginate') === '1';
     }
@@ -663,21 +638,9 @@
       if (s) { observer.unobserve(s); s.remove(); }
     }
 
-    /* Keep the observer pointed at whichever section is currently shown. */
-    function syncActive() {
-      var secs = document.querySelectorAll('.category-section');
-      for (var i = 0; i < secs.length; i++) {
-        if (secs[i].style.display === 'none') continue;
-        arm(secs[i]);
-      }
-    }
-
-    // Exposed so the category switcher can re-arm after showing another section.
-    window.__railSync = syncActive;
-
-    // Arm the section that is already visible on load.
+    // Only the section the server marked can paginate, and switching category
+    // is a full navigation now, so there is exactly one at load time.
     var initial = document.querySelector('.category-section[data-has-more="1"]');
     if (initial) arm(initial);
-    syncActive();
   })();
 })();
