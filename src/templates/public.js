@@ -279,9 +279,12 @@ function hero({ total, catCount, featured, lang = DEFAULT_LANG, titleLines, subt
       const tags = item.tags.slice(0, 3)
         .map((tag) => `<span class="hero-agent-tag">${esc(tag)}</span>`)
         .join('');
+      // The card opens our own review page. It deliberately carries no
+      // `data-tool-id`: the tracker treats any such link as a visit to the
+      // product's site, and the outbound CTA on the detail page already does
+      // that job (and is the only place a visit should be counted).
       return `<a class="hero-agent-card hero-agent-accent-${i % 4}"
-          href="${esc(item.url)}" target="_blank" rel="${outboundRel(item)}"
-          data-tool-id="${item.id}">
+          href="${esc(localePath(lang, `/tools/${item.slug}`))}">
         <div class="hero-agent-head">
           <span class="hero-agent-name">${esc(item.name)}</span>
           ${kicker ? `<span class="hero-agent-kicker">${esc(kicker)}</span>` : ''}

@@ -1514,11 +1514,12 @@ body.sidebar-collapsed .sidebar-footer a { justify-content: center; padding: 8px
 .detail-meta a:hover { color: var(--text-primary); }
 .detail-meta .pricing-tag { margin-right: 2px; }
 /* Each item owns its leading separator. When the row wraps, the item that
-   starts a line keeps a "路" that would look orphaned 鈥?so on narrow widths we
-   drop the separators and let the chips wrap on their own instead. */
+   starts a line would keep an orphaned separator, so narrow widths drop it and
+   let the chips wrap on their own instead. The glyph is written as an escape
+   so it cannot pick up whatever encoding this file happens to be saved in. */
 .detail-meta-item { display: inline-flex; align-items: center; }
 .detail-meta-item::before {
-  content: '路';
+  content: '\00B7';
   opacity: .5;
   user-select: none;
   margin-right: 8px;
