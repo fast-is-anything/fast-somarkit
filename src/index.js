@@ -7,7 +7,7 @@ import {
   listCategories, listCategoriesPage, countToolsByCategory, listPublishedTools, listFeaturedTools, listToolsPage, listTrendingTools,
   getToolBySlug, getTool, listToolsAdmin, createTool, updateTool, deleteTool, setToolStatus,
   incrementVisits, getCategoryBySlug, getCategory, createCategory, updateCategory,
-  deleteCategory, slugify, logAudit, listAudit, listAuditPage, dashboardStats, topTools,
+  deleteCategory, slugify, logAudit, listAudit, listAuditPage, dashboardStats, adminNavCounts, topTools,
   listAdmins, listAdminsPage, setAdminActive, deleteAuditLog, findAdminByEmail,
   recordClick, analyticsSummary,
   createSubmission, recentSubmissionCount, listSubmissionsAdmin, countSubmissionsByStatus,
@@ -653,6 +653,15 @@ function parsePerPage(url, fallback = 20) {
 async function adminGet(env, ctx, request, path, url, user) {
   const flash = readFlash(url);
 
+  /*
+   * Sidebar badge counts, read once per request so every admin page shows the
+   * same numbers — previously only two pages passed anything, and one of them
+   * borrowed the pending-submission count for the 工具管理 badge.
+   *   工具管理 → tools that are not published
+   *   工具提交 → submissions still waiting for review
+   */
+  const nav = await adminNavCounts(env.DB);
+
   if (path === '/admin') {
     // Dashboard cards: 最近更新 shows the latest 10 edits, 访问排行 the top 10.
     const [stats, top, recent, categories, audit] = await Promise.all([
@@ -662,7 +671,7 @@ async function adminGet(env, ctx, request, path, url, user) {
       listCategories(env.DB, { includeHidden: true }),
       listAudit(env.DB, 8),
     ]);
-    return html(dashboardPage({ user, env, stats, top, recent, categories, audit }));
+    return html(dashboardPage({ user, env, nav, stats, top, recent, categories, audit }));
   }
 
   // tools
@@ -679,7 +688,7 @@ async function adminGet(env, ctx, request, path, url, user) {
     ]);
     const pages = Math.max(1, Math.ceil(data.total / perPage));
     return html(toolsPage({
-      user, env, tools: data.tools, total: data.total, page, perPage, pages,
+      user, env, nav, tools: data.tools, total: data.total, page, perPage, pages,
       q, category, status, sort, categories, flash,
     }));
   }
@@ -705,7 +714,7 @@ async function adminGet(env, ctx, request, path, url, user) {
         }
       : null;
     return html(toolFormPage({
-      user, env, tool: prefill, categories, flash, isNew: true,
+      user, env, nav, tool: prefill, categories, flash, isNew: true,
       submissionId: submission ? submission.id : null,
     }));
   }
@@ -717,7 +726,7 @@ async function adminGet(env, ctx, request, path, url, user) {
       listCategories(env.DB, { includeHidden: true }),
     ]);
     if (!tool) return redirect('/admin/tools?err=' + encodeURIComponent('工具不存在'));
-    return html(toolFormPage({ user, env, tool, categories, flash, isNew: false }));
+    return html(toolFormPage({ user, env, nav, tool, categories, flash, isNew: false }));
   }
 
   // categories
@@ -730,13 +739,13 @@ async function adminGet(env, ctx, request, path, url, user) {
     ]);
     const pages = Math.max(1, Math.ceil(data.total / perPage));
     return html(categoriesPage({
-      user, env, categories: data.categories, counts, total: data.total,
+      user, env, nav, categories: data.categories, counts, total: data.total,
       page, perPage, pages, flash,
     }));
   }
   if (path === '/admin/categories/new') {
     return html(categoryFormPage({
-      user, env, category: null, icons: Object.keys(ICONS), flash, isNew: true,
+      user, env, nav, category: null, icons: Object.keys(ICONS), flash, isNew: true,
     }));
   }
   m = path.match(/^\/admin\/categories\/(\d+)\/edit$/);
@@ -744,7 +753,7 @@ async function adminGet(env, ctx, request, path, url, user) {
     const category = await getCategory(env.DB, Number(m[1]));
     if (!category) return redirect('/admin/categories?err=' + encodeURIComponent('分类不存在'));
     return html(categoryFormPage({
-      user, env, category, icons: Object.keys(ICONS), flash, isNew: false,
+      user, env, nav, category, icons: Object.keys(ICONS), flash, isNew: false,
     }));
   }
 
@@ -759,7 +768,7 @@ async function adminGet(env, ctx, request, path, url, user) {
     ]);
     const pages = Math.max(1, Math.ceil(data.total / perPage));
     return html(submissionsPage({
-      user, env, submissions: data.submissions, total: data.total,
+      user, env, nav, submissions: data.submissions, total: data.total,
       page, perPage, pages, status, counts, flash,
     }));
   }
@@ -769,7 +778,7 @@ async function adminGet(env, ctx, request, path, url, user) {
     if (!s) return redirect('/admin/submissions?err=' + encodeURIComponent('提交记录不存在'));
     const cat = s.category_id ? await getCategory(env.DB, s.category_id) : null;
     return html(submissionDetailPage({
-      user, env, s: { ...s, category_name: cat ? cat.name : '' }, flash,
+      user, env, nav, s: { ...s, category_name: cat ? cat.name : '' }, flash,
     }));
   }
 
@@ -796,7 +805,7 @@ async function adminGet(env, ctx, request, path, url, user) {
     const data = await listAuditPage(env.DB, { page, perPage, actor });
     const pages = Math.max(1, Math.ceil(data.total / perPage));
     return html(auditPage({
-      user, env, entries: data.entries, total: data.total,
+      user, env, nav, entries: data.entries, total: data.total,
       page, perPage, pages, actor, flash,
     }));
   }
@@ -808,7 +817,7 @@ async function adminGet(env, ctx, request, path, url, user) {
     const data = await listAdminsPage(env.DB, { page, perPage });
     const pages = Math.max(1, Math.ceil(data.total / perPage));
     return html(adminsPage({
-      user, env, admins: data.admins, allowList: adminAllowList(env),
+      user, env, nav, admins: data.admins, allowList: adminAllowList(env),
       total: data.total, page, perPage, pages, flash,
     }));
   }

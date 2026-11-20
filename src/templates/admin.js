@@ -43,11 +43,31 @@ function initialsOf(name) {
   return s.slice(0, 2).toUpperCase();
 }
 
-export function adminLayout({ title, breadcrumb = '', user, env, children, activePath = '', stats = {} }) {
-  const nav = NAV.map((group) => {
+export function adminLayout({ title, breadcrumb = '', user, env, children, activePath = '', stats = {}, nav = {} }) {
+  /*
+   * Sidebar badges. Each one belongs to the entry it sits on, and both come from
+   * the same `adminNavCounts()` query on every admin page:
+   *   工具管理 → number of tools that are not published (下架 / 草稿 / 归档)
+   *   工具提交 → number of submissions still waiting for review
+   * Previously 工具管理 borrowed the pending-submission count on one page only,
+   * so the same badge meant two different things depending on where you were.
+   */
+  const badges = {
+    '/admin/tools': nav.drafts
+      ? { n: nav.drafts, title: `${nav.drafts} 个工具未发布` }
+      : null,
+    '/admin/submissions': nav.pending
+      ? { n: nav.pending, title: `${nav.pending} 条提交待审核` }
+      : null,
+  };
+
+  const navHtml = NAV.map((group) => {
     const items = group.items.map((it) => {
       const active = it.match === activePath || (it.match !== '/admin' && activePath.startsWith(it.match));
-      const badge = it.match === '/admin/tools' && stats.drafts ? `<span class="ad-nav-badge">${stats.drafts}</span>` : '';
+      const b = badges[it.match];
+      const badge = b
+        ? `<span class="ad-nav-badge" title="${esc(b.title)}">${b.n}</span>`
+        : '';
       return `<a class="ad-nav-item ${active ? 'active' : ''}" href="${it.href}" data-match="${it.match}" title="${esc(it.label)}">
         <span class="ad-nav-icon">${it.icon}</span>
         <span class="ad-nav-text">${esc(it.label)}</span>
@@ -88,7 +108,7 @@ document.documentElement.setAttribute('data-ad-theme',t);}catch(e){}})();
         ${UI.panelLeft}
       </button>
     </div>
-    <nav class="ad-nav">${nav}</nav>
+    <nav class="ad-nav">${navHtml}</nav>
     <div class="ad-sidebar-foot">
       <div class="ad-user-row">
         <a class="ad-user" href="/" target="_blank" rel="noopener" title="查看站点">
@@ -197,7 +217,7 @@ document.documentElement.setAttribute('data-ad-theme',t);}catch(e){}})();
 
 // --- dashboard --------------------------------------------------------------
 
-export function dashboardPage({ user, env, stats, top, recent, categories, audit }) {
+export function dashboardPage({ user, env, nav = {}, stats, top, recent, categories, audit }) {
   const catCounts = {};
   for (const t of top) catCounts[t.category_id] = (catCounts[t.category_id] || 0) + 1;
 
@@ -279,13 +299,13 @@ export function dashboardPage({ user, env, stats, top, recent, categories, audit
   return adminLayout({
     title: '仪表盘',
     breadcrumb: `欢迎回来，${esc(user.name || user.email)}`,
-    user, env, children, activePath: '/admin', stats,
+    user, env, children, activePath: '/admin', stats, nav,
   });
 }
 
 // --- tools list -------------------------------------------------------------
 
-export function toolsPage({ user, env, tools, total, page, perPage, pages, q, category, status, sort = 'updated', categories, flash }) {
+export function toolsPage({ user, env, nav = {}, tools, total, page, perPage, pages, q, category, status, sort = 'updated', categories, flash }) {
   const rows = tools.map((t) => `<tr>
     <td data-label="工具">
       <div class="ad-cell-main">${esc(t.name)}</div>
@@ -369,7 +389,7 @@ export function toolsPage({ user, env, tools, total, page, perPage, pages, q, ca
     </div>
   `;
 
-  return adminLayout({ title: '工具管理', breadcrumb: '收录、编辑与上下架', user, env, children, activePath: '/admin/tools' });
+  return adminLayout({ title: '工具管理', breadcrumb: '收录、编辑与上下架', user, env, children, activePath: '/admin/tools', nav });
 }
 
 /**
@@ -458,7 +478,7 @@ function listHref(base, params = {}) {
 
 // --- tool form --------------------------------------------------------------
 
-export function toolFormPage({ user, env, tool, categories, flash, isNew, submissionId = null }) {
+export function toolFormPage({ user, env, nav = {}, tool, categories, flash, isNew, submissionId = null }) {
   const t = tool || {};
   const opts = categories.map((c) => `<option value="${c.id}" ${String(c.id) === String(t.category_id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
   const priceOpts = Object.entries(PRICING).map(([k, v]) =>
@@ -1100,13 +1120,13 @@ export function toolFormPage({ user, env, tool, categories, flash, isNew, submis
   return adminLayout({
     title: isNew ? '新增工具' : '编辑工具',
     breadcrumb: isNew ? '添加一条新的收录' : esc(t.name || ''),
-    user, env, children, activePath: '/admin/tools',
+    user, env, children, activePath: '/admin/tools', nav,
   });
 }
 
 // --- categories -------------------------------------------------------------
 
-export function categoriesPage({ user, env, categories, counts, total = 0, page = 1, perPage = 20, pages = 1, flash }) {
+export function categoriesPage({ user, env, nav = {}, categories, counts, total = 0, page = 1, perPage = 20, pages = 1, flash }) {
   const rows = categories.map((c) => `<tr>
     <td data-label="分类">
       <div class="ad-cell-main">${esc(c.name)}</div>
@@ -1143,10 +1163,10 @@ export function categoriesPage({ user, env, categories, counts, total = 0, page 
     </div>
   `;
 
-  return adminLayout({ title: '分类管理', breadcrumb: '组织前台侧边导航', user, env, children, activePath: '/admin/categories' });
+  return adminLayout({ title: '分类管理', breadcrumb: '组织前台侧边导航', user, env, children, activePath: '/admin/categories', nav });
 }
 
-export function categoryFormPage({ user, env, category, icons, flash, isNew }) {
+export function categoryFormPage({ user, env, nav = {}, category, icons, flash, isNew }) {
   const c = category || {};
   const iconOpts = icons.map((k) =>
     `<option value="${k}" ${k === (c.icon || 'grid') ? 'selected' : ''}>${k}</option>`).join('');
@@ -1213,13 +1233,13 @@ export function categoryFormPage({ user, env, category, icons, flash, isNew }) {
   return adminLayout({
     title: isNew ? '新增分类' : '编辑分类',
     breadcrumb: esc(c.name || ''),
-    user, env, children, activePath: '/admin/categories',
+    user, env, children, activePath: '/admin/categories', nav,
   });
 }
 
 // --- import -----------------------------------------------------------------
 
-export function auditPage({ user, env, entries, total = 0, page = 1, perPage = 20, pages = 1, actor = '', flash }) {
+export function auditPage({ user, env, nav = {}, entries, total = 0, page = 1, perPage = 20, pages = 1, actor = '', flash }) {
   const rows = entries.map((a) => `<tr>
     <td class="ad-cell-sub" data-label="时间" style="white-space:nowrap">${esc(fmtTime(a.created_at))}</td>
     <td data-label="操作人">${esc(a.actor || '系统')}</td>
@@ -1255,12 +1275,12 @@ export function auditPage({ user, env, entries, total = 0, page = 1, perPage = 2
     </div>
   `;
 
-  return adminLayout({ title: '操作日志', breadcrumb: '谁在什么时候改了什么', user, env, children, activePath: '/admin/audit' });
+  return adminLayout({ title: '操作日志', breadcrumb: '谁在什么时候改了什么', user, env, children, activePath: '/admin/audit', nav });
 }
 
 // --- admins -----------------------------------------------------------------
 
-export function adminsPage({ user, env, admins, allowList, total = 0, page = 1, perPage = 20, pages = 1, flash }) {
+export function adminsPage({ user, env, nav = {}, admins, allowList, total = 0, page = 1, perPage = 20, pages = 1, flash }) {
   const rows = admins.map((a) => `<tr>
     <td data-label="账号">
       <div style="display:flex;align-items:center;gap:10px">
@@ -1312,7 +1332,7 @@ export function adminsPage({ user, env, admins, allowList, total = 0, page = 1, 
     </div>
   `;
 
-  return adminLayout({ title: '管理员', breadcrumb: '控制谁可以进入后台', user, env, children, activePath: '/admin/admins' });
+  return adminLayout({ title: '管理员', breadcrumb: '控制谁可以进入后台', user, env, children, activePath: '/admin/admins', nav });
 }
 
 // --- helpers ----------------------------------------------------------------
@@ -1381,7 +1401,7 @@ export function fmtTime(s) {
 
 // --- submissions (admin) ----------------------------------------------------
 
-export function submissionsPage({ user, env, submissions, total, page, perPage, pages, status, counts, flash }) {
+export function submissionsPage({ user, env, nav = {}, submissions, total, page, perPage, pages, status, counts, flash }) {
   /* Detail content for the popup. Rendered once per row into an inert
      <template>, then cloned into a single shared <dialog> when "详情" is
      clicked — so the markup is server-rendered (no client-side escaping) while
@@ -1587,12 +1607,11 @@ export function submissionsPage({ user, env, submissions, total, page, perPage, 
   return adminLayout({
     title: '工具提交',
     breadcrumb: `${counts.pending} 条待审核`,
-    user, env, children, activePath: '/admin/submissions',
-    stats: { drafts: counts.pending },
+    user, env, children, activePath: '/admin/submissions', nav,
   });
 }
 
-export function submissionDetailPage({ user, env, s, flash }) {
+export function submissionDetailPage({ user, env, nav = {}, s, flash }) {
   const contact = [s.submitter_name, s.submitter_email].filter(Boolean).join(' · ') || '匿名';
   const children = `
     ${flash ? `<div class="ad-alert ad-alert-${esc(flash.type)}" id="adFlash" data-message="1">${esc(flash.message)}</div>` : ''}
@@ -1686,7 +1705,7 @@ export function submissionDetailPage({ user, env, s, flash }) {
   return adminLayout({
     title: '提交详情',
     breadcrumb: esc(s.name),
-    user, env, children, activePath: '/admin/submissions',
+    user, env, children, activePath: '/admin/submissions', nav,
   });
 }
 

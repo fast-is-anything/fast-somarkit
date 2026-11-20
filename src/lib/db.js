@@ -838,6 +838,25 @@ export async function deleteSubmission(db, id) {
 
 // --- stats ------------------------------------------------------------------
 
+/**
+ * Counts for the sidebar badges, computed once per admin request so every page
+ * shows the same numbers.
+ *
+ * `drafts`  = tools that are not published (下架 / 草稿 / 归档) — the work the
+ *             工具管理 entry still holds.
+ * `pending` = visitor submissions waiting for review — 工具提交.
+ */
+export async function adminNavCounts(db) {
+  const [drafts, pending] = await db.batch([
+    db.prepare("SELECT COUNT(*) AS n FROM tools WHERE status != 'published'"),
+    db.prepare("SELECT COUNT(*) AS n FROM submissions WHERE status = 'pending'"),
+  ]);
+  return {
+    drafts: drafts.results?.[0]?.n || 0,
+    pending: pending.results?.[0]?.n || 0,
+  };
+}
+
 export async function dashboardStats(db) {
   const [tools, cats, drafts, visits, admins] = await db.batch([
     db.prepare('SELECT COUNT(*) AS n FROM tools'),
