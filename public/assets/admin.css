@@ -345,6 +345,15 @@ button { font-family: inherit; }
 .an-grid-2 { align-items: start; }
 .an-grid-3 { align-items: stretch; }
 
+/* Inside a grid the `gap` already provides the rhythm. The global
+   `.ad-card + .ad-card` margin would otherwise push every card after the first
+   one down inside its row, leaving it 16px shorter than the row it is supposed
+   to stretch to — which is exactly what made the three comparison cards
+   disagree (179 / 163 / 163). */
+.an-grid-2 > .ad-card + .ad-card,
+.an-grid-3 > .ad-card + .ad-card,
+.dash-grid > .ad-card + .ad-card { margin-top: 0; }
+
 /* Banners above the list shrink the table (see JS fitTable) so the page still
    fits the viewport where possible. */
 .ad-content:has(> .ad-alert) > .ad-card:has([data-fixed-table]) { margin-top: 0; }
