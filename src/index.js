@@ -33,7 +33,7 @@ import {
   beginLogin, completeLogin, currentAdmin, logout, adminAllowList, isConfigured,
   SESSION_COOKIE, redirectUri,
 } from './lib/auth.js';
-import { normalizeLang, LANGS, splitLocale, localePath, DEFAULT_LANG } from './lib/i18n.js';
+import { normalizeLang, LANGS, splitLocale, localePath, DEFAULT_LANG, UNPREFIXED_LANG } from './lib/i18n.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -88,18 +88,40 @@ async function router(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '') || '/';
   const method = request.method;
+
+  // One canonical origin: apex, no trailing slash. Both www and a trailing
+  // slash currently answer 200, which splits crawl signals even with a
+  // canonical tag; a 301 settles it at the edge.
+  if (method === 'GET' || method === 'HEAD') {
+    const host = url.hostname.toLowerCase();
+    if (host.startsWith('www.')) {
+      return new Response(null, {
+        status: 301,
+        headers: { Location: `https://${host.slice(4)}${url.pathname}${url.search}`, 'cache-control': 'public, max-age=3600' },
+      });
+    }
+    if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
+      const clean = url.pathname.replace(/\/+$/, '');
+      return new Response(null, {
+        status: 301,
+        headers: { Location: `${url.origin}${clean}${url.search}`, 'cache-control': 'public, max-age=3600' },
+      });
+    }
+  }
+
   const theme = getCookie(request, 'somarkit-theme') === 'dark' ? 'dark' : 'light';
   // GA4 measurement id for the public pages; empty string disables the tag.
   const gaId = String(env.GA_MEASUREMENT_ID || '').trim();
 
   // Language comes from the URL prefix alone (`/zh/...`, `/en/...`, `/ja/...`,
-  // `/ko/...` — one per LANGS entry).
+  // `/ko/...` — one per LANGS entry). A path with no prefix is an alias that
+  // renders UNPREFIXED_LANG (English) and is marked noindex further down.
   //
   // There is no cookie and no Accept-Language sniffing: Googlebot sends
   // `Accept-Language: en`, so any guess would make the crawler index a language
   // the URL does not advertise. One URL = one language, always.
   const loc = splitLocale(path);
-  const lang = loc.lang || DEFAULT_LANG;
+  const lang = loc.lang || UNPREFIXED_LANG;
   // Public paths are language-neutral ("/tools/chatgpt"); helpers below add the
   // prefix back so every generated link carries it.
   const pubPath = loc.rest;
@@ -110,10 +132,10 @@ async function router(request, env, ctx) {
   /**
    * Finalise a public HTML response.
    *
-   * Also handles the "no locale prefix" case: such a request renders the
-   * default language, but it is not the canonical address. Instead of
+   * Also handles the "no locale prefix" case: such a request renders
+   * UNPREFIXED_LANG (English), but it is not the canonical address. Instead of
    * rewriting HTML after the fact, the templates are told via `unprefixed`
-   * (see the page builders) so they emit the /zh canonical and a noindex tag.
+   * (see the page builders) so they emit the /en canonical and a noindex tag.
    * This keeps bare links working without letting two URLs compete in search.
    */
   const withLang = (res) => {
@@ -232,13 +254,12 @@ async function router(request, env, ctx) {
 
   // ------------------------------------------------------- public routes ---
   //
-  // Everything below is a public page and must carry a locale prefix. A
-  // request without one is a 404 by design: giving every page exactly one
-  // address avoids duplicate content and keeps hreflang honest.
-  // A path without a locale prefix still renders, in the default language, so
-  // existing bookmarks and bare "/tools/x" links keep working. It is not a
-  // canonical address though: canonical points at the /zh version and the page
-  // is marked noindex (see head()), so the two addresses never compete.
+  // Everything below is a public page and its canonical address carries a
+  // locale prefix. A path without one still renders, in UNPREFIXED_LANG
+  // (English), so existing bookmarks and bare "/tools/x" links keep working.
+  // It is not a canonical address though: canonical points at the /en version
+  // and the page is marked noindex (see head()), so the two addresses never
+  // compete.
   const unprefixed = !loc.matched;
 
   if (pubPath === '/' || pubPath === '/index.html') {
@@ -381,10 +402,12 @@ async function router(request, env, ctx) {
         loadTrending(env.DB, lang),
       ]);
       const tools = allTools.filter((x) => x.category_id === category.id);
+      const page = Math.max(1, Number(url.searchParams.get('page') || 1) || 1);
       return withLang(categoryPage({
-        category, categories, counts, tools, allTools, featured,
+        category, categories, counts, tools, featured, page,
         total: allTools.length, catCount: categories.length, theme, lang, gaId,
         basePath: pubPath,
+        ...pageFlags,
       }));
     }
   }
@@ -424,6 +447,14 @@ async function renderHome(request, env, theme, lang = DEFAULT_LANG, gaId = '', b
 function sitemap(categories, tools) {
   const base = 'https://somarkit.com';
   const today = new Date().toISOString().slice(0, 10);
+  // Real modification dates, not "now". A sitemap that stamps every URL with
+  // today teaches crawlers to ignore lastmod entirely.
+  const dateOf = (row) => String((row && row.updated_at) || '').slice(0, 10);
+  const siteUpdated = [...categories, ...tools]
+    .map(dateOf)
+    .filter(Boolean)
+    .sort()
+    .pop() || today;
 
   // Every page is listed once per locale, and each entry advertises all of its
   // translations via xhtml:link so search engines tie the pair together
@@ -440,14 +471,14 @@ ${LANGS.map((x) => `    <xhtml:link rel="alternate" hreflang="${x.code}" href="$
   };
 
   const urls = [
-    ...entry('/', today, 'daily', '1.0'),
-    ...entry('/about', today, 'monthly', '0.4'),
-    ...categories.flatMap((c) => entry(`/${c.slug}`, today, 'weekly', '0.8')),
+    ...entry('/', siteUpdated, 'daily', '1.0'),
+    ...entry('/about', siteUpdated, 'monthly', '0.4'),
+    ...categories.flatMap((c) => entry(`/${c.slug}`, dateOf(c) || siteUpdated, 'weekly', '0.8')),
     // A tool can opt out of the sitemap, and a noindex page must never be
     // advertised here either.
     ...tools
       .filter((t) => t.in_sitemap !== 0 && t.noindex !== 1)
-      .flatMap((t) => entry(`/tools/${t.slug}`, String(t.updated_at).slice(0, 10), 'weekly', '0.6')),
+      .flatMap((t) => entry(`/tools/${t.slug}`, dateOf(t) || siteUpdated, 'weekly', '0.6')),
   ];
   return new Response(
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls.join('\n')}\n</urlset>`,

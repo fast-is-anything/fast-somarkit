@@ -12,7 +12,8 @@
     "db:seed:local": "wrangler d1 execute somarkit --local --file=./db/seed.sql",
     "db:seed": "wrangler d1 execute somarkit --remote --file=./db/seed.sql",
     "build:css": "node scripts/build-css.mjs",
-    "check:i18n": "node scripts/check-i18n.mjs"
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "seo:audit": "node scripts/seo-audit.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.71.0"

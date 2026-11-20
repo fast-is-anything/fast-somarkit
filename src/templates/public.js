@@ -5,7 +5,7 @@
 import { esc, html } from '../lib/crypto.js';
 import { ICONS, UI, icon } from '../lib/icons.js';
 import { logoGlyph } from '../lib/logo.js';
-import { t, pricingLabel, LANGS, normalizeLang, localePath, splitLocale, DEFAULT_LANG } from '../lib/i18n.js';
+import { t, pricingLabel, LANGS, normalizeLang, localePath, splitLocale, DEFAULT_LANG, UNPREFIXED_LANG } from '../lib/i18n.js';
 import { renderMarkdown } from '../lib/markdown.js';
 
 /**
@@ -105,8 +105,9 @@ function langSwitcher(lang, { mobile = false, basePath = '/' } = {}) {
  * hreflang set for the current page.
  *
  * `canonical` points at one locale; the language-neutral path is recovered from
- * it so every locale gets an absolute URL of its own. `x-default` is the
- * Chinese page because Chinese is the site default.
+ * it so every locale gets an absolute URL of its own. `x-default` is the page
+ * the bare, prefix-less URLs serve (English), so a visitor who matches no
+ * language lands on the same page they would get without a prefix.
  */
 function hreflangLinks(canonical, lang) {
   const path = canonical ? new URL(canonical).pathname : '/';
@@ -115,14 +116,19 @@ function hreflangLinks(canonical, lang) {
   const links = LANGS.map(
     (l) => `<link rel="alternate" hreflang="${l.code}" href="${base}${localePath(l.code, neutral)}">`
   );
-  links.push(`<link rel="alternate" hreflang="x-default" href="${base}${localePath(DEFAULT_LANG, neutral)}">`);
+  links.push(`<link rel="alternate" hreflang="x-default" href="${base}${localePath(UNPREFIXED_LANG, neutral)}">`);
   return links.join('\n');
 }
 
-function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [], theme = 'light', lang = DEFAULT_LANG, gaId = '', noindex = false }) {
+function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [], theme = 'light', lang = DEFAULT_LANG, gaId = '', noindex = false, keywords = '', ogType = 'website', ogImage = 'https://somarkit.com/og-cover.png', modifiedTime = '', noHreflang = false }) {
   // <html lang>/og:locale come from the LANGS entry, so a new locale is
   // announced correctly without touching this template.
   const meta = langMeta(lang);
+  const kw = keywords || t(lang, 'seo.keywords');
+  const isoTime = toIsoDateTime(modifiedTime);
+  const articleTime = isoTime
+    ? `<meta property="article:modified_time" content="${esc(isoTime)}">`
+    : '';
   return `<!DOCTYPE html>
 <html lang="${esc(meta.htmlLang)}" data-lang="${esc(meta.code)}" data-theme="${theme}">
 <head>
@@ -130,7 +136,7 @@ function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
-<meta name="keywords" content="SoMarkIt,AI工具,AI导航,AI工具导航,ChatGPT,Claude,DeepSeek,AI绘画,AI视频,AI编程,AI写作,人工智能工具">
+<meta name="keywords" content="${esc(kw)}">
 <meta name="robots" content="${noindex
   ? 'noindex, follow'
   : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'}">
@@ -138,21 +144,26 @@ function head({ title, description, canonical, siteName = 'SoMarkIt', jsonLd = [
 <meta name="theme-color" content="#0B1120" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
-${hreflangLinks(canonical, lang)}
+${canonical && !noHreflang ? hreflangLinks(canonical, lang) : ''}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
-<meta property="og:type" content="website">
+<meta property="og:type" content="${esc(ogType)}">
 <meta property="og:site_name" content="${esc(siteName)}">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
-<meta property="og:image" content="https://somarkit.com/og-cover.svg">
+<meta property="og:image" content="${esc(ogImage)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${esc(t(lang, 'seo.ogAlt'))}">
 <meta property="og:locale" content="${esc(meta.ogLocale)}">
 ${canonical ? `<meta property="og:url" content="${esc(canonical)}">` : ''}
+${articleTime}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
-<meta name="twitter:image" content="https://somarkit.com/og-cover.svg">
+<meta name="twitter:image" content="${esc(ogImage)}">
+<meta name="twitter:image:alt" content="${esc(t(lang, 'seo.ogAlt'))}">
 <link rel="stylesheet" href="/assets/site.css">
 <script>
 (function(){try{var t=localStorage.getItem('somarkit-theme');
@@ -259,9 +270,9 @@ function topbar({ categories, activeSlug = 'all', lang = DEFAULT_LANG, basePath 
   </div>`;
 }
 
-function hero({ total, catCount, featured, lang = DEFAULT_LANG }) {
+function hero({ total, catCount, featured, lang = DEFAULT_LANG, titleLines, subtitle, showFeatured = true, featuredTitle = '', breadcrumb = '' }) {
   let rail = '';
-  if (featured.length) {
+  if (showFeatured && featured.length) {
     // Two rich colour cards on top, matching the reference density.
     const rows = featured.slice(0, 2).map((item, i) => {
       const kicker = item.tags[0] || item.category_name || '';
@@ -281,17 +292,19 @@ function hero({ total, catCount, featured, lang = DEFAULT_LANG }) {
       </a>`;
     });
     rail = `<div class="hero-featured" aria-labelledby="featured-heading">
-      <h2 class="hero-featured-title" id="featured-heading"><span class="i-flame">${UI.flame}</span>${esc(t(lang, 'hero.featured'))}</h2>
+      <h2 class="hero-featured-title" id="featured-heading"><span class="i-flame">${UI.flame}</span>${esc(featuredTitle || t(lang, 'hero.featured'))}</h2>
       <div class="hero-featured-list">${rows.join('\n')}</div>
     </div>`;
   }
 
   return `<header class="hero">
     <div class="hero-inner">
-      <div class="hero-combined">
+      <div class="hero-combined ${rail ? '' : 'hero-combined-solo'}">
         <div class="hero-content">
-          <h1 class="hero-title"><span class="hero-title-line">${esc(t(lang, 'hero.title.1'))}</span><span class="hero-title-line">${esc(t(lang, 'hero.title.2'))}</span></h1>
-          <p class="hero-subtitle">${esc(t(lang, 'hero.subtitle', total, catCount))}</p>
+          ${breadcrumb ? `<nav class="hero-breadcrumb" aria-label="breadcrumb">${breadcrumb}</nav>` : ''}
+          <h1 class="hero-title">${(titleLines || [t(lang, 'hero.title.1'), t(lang, 'hero.title.2')])
+            .map((line) => `<span class="hero-title-line">${esc(line)}</span>`).join('')}</h1>
+          <p class="hero-subtitle">${esc(subtitle || t(lang, 'hero.subtitle', total, catCount))}</p>
           <div class="hero-search" role="search" aria-label="${esc(t(lang, 'hero.searchAria'))}">
             <div class="hero-search-wrapper">
               <span class="search-icon">${UI.search}</span>
@@ -383,10 +396,38 @@ function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 }
 
+/** SQLite `datetime('now')` → ISO 8601; already-ISO values pass through. */
+function toIsoDateTime(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  if (/T.*Z$/.test(s)) return s;
+  return `${s.replace(' ', 'T')}Z`;
+}
+
+/** Approximate rendered width: CJK counts as two Latin characters. */
+function displayWidth(s = '') {
+  let width = 0;
+  for (const ch of String(s)) {
+    const cp = ch.codePointAt(0);
+    const wide = (cp >= 0x1100 && cp <= 0x115f)
+      || (cp >= 0x2e80 && cp <= 0x303e)
+      || (cp >= 0x3041 && cp <= 0x33ff)
+      || (cp >= 0x3400 && cp <= 0x4dbf)
+      || (cp >= 0x4e00 && cp <= 0x9fff)
+      || (cp >= 0xac00 && cp <= 0xd7a3)
+      || (cp >= 0xf900 && cp <= 0xfaff)
+      || (cp >= 0xfe30 && cp <= 0xfe6f)
+      || (cp >= 0xff00 && cp <= 0xff60);
+    if (wide) width += 2;
+    else if (/[A-Za-z0-9]/.test(ch)) width += 1;
+  }
+  return width;
+}
+
 /**
  * Brand logo tile: the stored image when there is one, the name's initials
  * otherwise. The real name is exposed to assistive tech, the image itself is
- * decorative (the adjacent <h3> already announces it).
+ * decorative (the adjacent tool name already announces it).
  */
 function logoBox(tool, cls) {
   const label = esc(tool.name || '');
@@ -409,11 +450,11 @@ export function toolCard(item, lang = DEFAULT_LANG) {
     <div class="tool-card-header">
       ${logoBox(item, 'tool-card-logo')}
       <div class="tool-info">
-        <h3 class="tool-name">
-          <span>${esc(item.name)}</span>
+        <div class="tool-name">
+          <a class="tool-name-link" href="${esc(localePath(lang, `/tools/${item.slug}`))}">${esc(item.name)}</a>
           ${item.is_hot ? `<span class="badge badge-hot">${esc(t(lang, 'badge.hot'))}</span>` : ''}
           ${item.is_new ? `<span class="badge badge-new">${esc(t(lang, 'badge.new'))}</span>` : ''}
-        </h3>
+        </div>
       </div>
     </div>
     <p class="tool-desc">${esc(item.description || t(lang, 'card.noDesc'))}</p>
@@ -440,7 +481,7 @@ export function toolCard(item, lang = DEFAULT_LANG) {
  * click can be handled client-side, on every page — no round-trip, no flash of
  * a loading screen after the first visit to a category page.
  */
-function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEFAULT_LANG, mode = 'subset', initialVisibleCount = null, paginateActive = false }) {
+function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEFAULT_LANG, mode = 'subset', initialVisibleCount = null, paginateActive = false, page = 1, totalPages = 1, pagePath = '', relatedCategories = [] }) {
   // On a category page only the matching section starts visible; the rest are
   // hidden up front so the server-rendered HTML already looks correct (no
   // flash of other categories before JS runs). Keyed off initialVisibleCount
@@ -479,7 +520,7 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEF
         ${open ? `data-has-more="1"${cursorAttr}` : ''}${hiddenAttr}>
         <div class="category-section-header">
           <span class="cat-icon">${icon(g.category.icon)}</span>
-          <span class="cat-name">${esc(categoryLabel(g.category, lang))}</span>
+          <h2 class="cat-name">${esc(categoryLabel(g.category, lang))}</h2>
           ${more && !open ? `<a class="section-more" href="${esc(localePath(lang, `/${g.category.slug}`))}">${esc(t(lang, 'content.viewAll'))} →</a>` : ''}
         </div>
         <div class="tools-grid" data-rail-grid>${cards}</div>
@@ -494,9 +535,47 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEF
 
   const shown = initialVisibleCount == null ? total : initialVisibleCount;
 
+  // Crawlable pagination. The visible "load on scroll" stream stays for people;
+  // these <a> links are what a crawler can follow past the first nine cards.
+  let pager = '';
+  if (totalPages > 1) {
+    const href = (n) => `${localePath(lang, pagePath)}${n > 1 ? `?page=${n}` : ''}`;
+    const item = (n, label, cls = '') => (n === page
+      ? `<span class="search-page ${cls} cur" aria-current="page">${label}</span>`
+      : `<a class="search-page ${cls}" href="${esc(href(n))}">${label}</a>`);
+    const from = Math.max(1, Math.min(page - 2, totalPages - 4));
+    const to = Math.min(totalPages, from + 4);
+    let nums = '';
+    for (let n = from; n <= to; n++) nums += item(n, String(n));
+    pager = `<nav class="search-pager category-pager" aria-label="${esc(t(lang, 'search.pagerAria'))}">
+      ${page > 1 ? item(page - 1, t(lang, 'search.prev'), 'step') : `<span class="search-page step disabled">${esc(t(lang, 'search.prev'))}</span>`}
+      ${nums}
+      ${page < totalPages ? item(page + 1, t(lang, 'search.next'), 'step') : `<span class="search-page step disabled">${esc(t(lang, 'search.next'))}</span>`}
+    </nav>`;
+  }
+
+  // Sibling categories, framed as an index at the foot of the page. It renders
+  // inside .content-area on purpose: the old version sat outside that column, so
+  // its rule ran edge to edge while the cards above stayed inset, and it had no
+  // padding against the footer.
+  const relatedNav = relatedCategories.length
+    ? `<nav class="related-categories" aria-label="${esc(t(lang, 'seo.relatedCategories'))}">
+      <h2 class="related-categories-title">${esc(t(lang, 'seo.relatedCategories'))}</h2>
+      <ul class="related-category-links">
+        ${relatedCategories.map((c) => `<li>
+          <a class="related-category" href="${esc(c.href)}">
+            <span class="related-category-icon" aria-hidden="true">${icon(c.icon, 16)}</span>
+            <span class="related-category-name">${esc(c.name)}</span>
+            <em class="related-category-count">${c.count}</em>
+          </a>
+        </li>`).join('\n        ')}
+      </ul>
+    </nav>`
+    : '';
+
   return `<div class="content-area">
     <div class="content-head" id="contentHead">
-      <h2>${esc(t(lang, 'content.title'))}</h2>
+      <div class="content-title">${esc(t(lang, 'content.title'))}</div>
       <span class="tools-count" id="toolsCount" aria-live="polite">${esc(t(lang, 'content.toolsCount', shown))}</span>
       <span class="content-head-spacer"></span>
       <div class="filter-bar" role="group" aria-label="${esc(t(lang, 'content.filterAria'))}" data-lang="${esc(normalizeLang(lang))}">${chips}</div>
@@ -504,11 +583,13 @@ function contentArea({ groups, categories, total, activeSlug = 'all', lang = DEF
     <div id="toolsContainer" role="list" aria-label="${esc(t(lang, 'content.title'))}" data-mode="${esc(mode)}" data-active="${esc(activeSlug)}">
       ${sections}
     </div>
+    ${pager}
     <div class="empty-state" id="emptyState" style="display:none">
       ${UI.search}
-      <h3>${esc(t(lang, 'empty.title'))}</h3>
+      <div class="empty-title">${esc(t(lang, 'empty.title'))}</div>
       <p>${esc(t(lang, 'empty.hint'))}<a href="#" data-clear-filters style="color:var(--accent)">${esc(t(lang, 'empty.clear'))}</a></p>
     </div>
+    ${relatedNav}
   </div>`;
 }
 
@@ -526,8 +607,8 @@ function footer(year, lang = DEFAULT_LANG, basePath = '/') {
   </footer>`;
 }
 
-function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false, mode = 'subset', initialVisibleCount = null, paginateActive = false }) {
-  return `${head({ title, description, canonical, jsonLd, theme, lang, gaId, noindex: unprefixed })}
+function shell({ title, description, canonical, jsonLd, categories, counts, groups, total, featured, activeSlug, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false, mode = 'subset', initialVisibleCount = null, paginateActive = false, keywords = '', ogType = 'website', modifiedTime = '', heroTitleLines = null, heroSubtitle = '', heroShowFeatured = true, featuredTitle = '', page = 1, totalPages = 1, pagePath = '', noHreflang = false, heroBreadcrumb = '', relatedCategories = [] }) {
+  return `${head({ title, description, canonical, jsonLd, theme, lang, gaId, noindex: unprefixed, keywords, ogType, modifiedTime, noHreflang })}
 <body>
 <noscript><div style="text-align:center;padding:1rem;background:#FEF2F2;color:#991B1B">本站需要启用 JavaScript 才能使用搜索与筛选功能。</div></noscript>
 <a href="#main-content" class="skip-to-content">${esc(t(lang, 'detail.home'))}</a>
@@ -537,8 +618,8 @@ function shell({ title, description, canonical, jsonLd, categories, counts, grou
     ${mobileHeader(lang, basePath)}
     ${topbar({ categories, activeSlug, lang, basePath })}
     <main id="main-content">
-      ${hero({ total, catCount: categories.length, featured, lang })}
-      ${contentArea({ groups, categories, total, activeSlug, lang, mode, initialVisibleCount, paginateActive })}
+      ${hero({ total, catCount: categories.length, featured, lang, titleLines: heroTitleLines, subtitle: heroSubtitle, showFeatured: heroShowFeatured, featuredTitle, breadcrumb: heroBreadcrumb })}
+      ${contentArea({ groups, categories, total, activeSlug, lang, mode, initialVisibleCount, paginateActive, page, totalPages, pagePath, relatedCategories })}
     </main>
     ${footer(new Date().getFullYear(), lang, basePath)}
   </div>
@@ -591,18 +672,19 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
   // the category page linked by "View all".
   const groups = groupByCategory(categories, tools, RAIL_PAGE_SIZE);
   const siteDesc = t(lang, 'seo.siteDesc');
+  const canonical = `https://somarkit.com${localePath(lang, '/')}`;
   const jsonLd = [
     {
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       name: 'SoMarkIt',
       alternateName: ['AI 工具导航', 'AI Tools Directory'],
-      url: 'https://somarkit.com/',
+      url: canonical,
       description: siteDesc,
       inLanguage: langMeta(lang).htmlLang,
       potentialAction: {
         '@type': 'SearchAction',
-        target: { '@type': 'EntryPoint', urlTemplate: 'https://somarkit.com/?q={search_term_string}' },
+        target: { '@type': 'EntryPoint', urlTemplate: `https://somarkit.com${localePath(lang, '/search')}?q={search_term_string}` },
         'query-input': 'required name=search_term_string',
       },
     },
@@ -623,7 +705,7 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
         '@type': 'ListItem',
         position: i + 1,
         name: x.name,
-        url: `https://somarkit.com/tools/${x.slug}`,
+        url: `https://somarkit.com${localePath(lang, `/tools/${x.slug}`)}`,
       })),
     },
   ];
@@ -631,11 +713,13 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
   return new Response(
     shell({
       title: t(lang, 'seo.homeTitle'),
-      description: `${t(lang, 'content.toolsCount', total)}, ${catCount}. ${siteDesc}`,
-      canonical: `https://somarkit.com${localePath(lang, '/')}` ,
+      description: t(lang, 'seo.homeDesc'),
+      keywords: t(lang, 'seo.keywords'),
+      canonical,
       jsonLd,
       categories, counts, groups, total, featured,
       activeSlug: 'all', theme, lang, gaId, basePath, unprefixed,
+      heroTitleLines: [t(lang, 'seo.homeH1.1'), t(lang, 'seo.homeH1.2')],
       // The home page renders the whole catalogue, so the rail can filter
       // client-side. Category pages only hold a subset and must navigate.
       mode: 'all',
@@ -647,6 +731,12 @@ export function homePage({ categories, counts, tools, featured, total, catCount,
 export function toolPage({ tool, categories, counts, related, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
   const siteDesc = t(lang, 'seo.siteDesc');
   const catName = tool.category_name || t(lang, 'detail.uncategorized');
+  const year = new Date().getFullYear();
+  const canonical = `https://somarkit.com${localePath(lang, `/tools/${tool.slug}`)}`;
+  const offers = tool.pricing === 'paid'
+    ? undefined
+    : { '@type': 'Offer', price: '0', priceCurrency: 'USD' };
+  const reviewHtml = renderMarkdown(tool.review_md || '');
   const jsonLd = [
     {
       '@context': 'https://schema.org',
@@ -654,19 +744,32 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
       name: tool.name,
       description: tool.description,
       url: tool.url,
-      applicationCategory: 'AI Tool',
+      applicationCategory: 'UtilitiesApplication',
       operatingSystem: 'Web',
-      offers: { '@type': 'Offer', price: tool.pricing === 'free' ? '0' : undefined, priceCurrency: 'USD' },
+      inLanguage: langMeta(lang).htmlLang,
+      ...(offers ? { offers } : {}),
+      ...(tool.updated_at ? { dateModified: toIsoDateTime(tool.updated_at) } : {}),
     },
     {
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
       itemListElement: [
-        { '@type': 'ListItem', position: 1, name: t(lang, 'detail.home'), item: 'https://somarkit.com/' },
-        { '@type': 'ListItem', position: 2, name: catName, item: `https://somarkit.com/${tool.category_slug || ''}` },
-        { '@type': 'ListItem', position: 3, name: tool.name, item: `https://somarkit.com/tools/${tool.slug}` },
+        { '@type': 'ListItem', position: 1, name: t(lang, 'detail.home'), item: `https://somarkit.com${localePath(lang, '/')}` },
+        { '@type': 'ListItem', position: 2, name: catName, item: `https://somarkit.com${localePath(lang, `/${tool.category_slug || ''}`)}` },
+        { '@type': 'ListItem', position: 3, name: tool.name, item: canonical },
       ],
     },
+    ...(reviewHtml ? [{
+      '@context': 'https://schema.org',
+      '@type': 'Review',
+      itemReviewed: { '@type': 'SoftwareApplication', name: tool.name, url: tool.url },
+      author: { '@type': 'Organization', name: t(lang, 'detail.authorName'), url: `https://somarkit.com${localePath(lang, '/about')}` },
+      publisher: { '@type': 'Organization', name: 'SoMarkIt', logo: { '@type': 'ImageObject', url: 'https://somarkit.com/apple-touch-icon.png' } },
+      reviewBody: tool.description || '',
+      inLanguage: langMeta(lang).htmlLang,
+      ...(tool.created_at ? { datePublished: toIsoDateTime(tool.created_at) } : {}),
+      ...(tool.updated_at ? { dateModified: toIsoDateTime(tool.updated_at) } : {}),
+    }] : []),
   ];
 
   const relatedCards = related.slice(0, 6).map((x) => toolCard(x, lang)).join('');
@@ -677,12 +780,26 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
   // `localizeTool` has already resolved review_md to this locale, falling back
   // to the default language when the translation is blank — so the template
   // stays language-agnostic.
-  const reviewHtml = renderMarkdown(tool.review_md || '');
+  const titleFull = `${t(lang, 'seo.toolTitle', tool.name, year)} | SoMarkIt`;
+  const titleShort = `${t(lang, 'seo.toolTitleShort', tool.name, year)} | SoMarkIt`;
+  const pageTitle = displayWidth(titleFull) <= 60
+    ? titleFull
+    : (displayWidth(titleShort) <= 60 ? titleShort : `${tool.name} | SoMarkIt`);
+  const baseDescription = (tool.description || siteDesc).trim();
+  const separator = /[。！？.!?]$/.test(baseDescription)
+    ? ' '
+    : (lang === 'zh' || lang === 'ja' ? '。' : '. ');
+  const description = displayWidth(baseDescription) >= 70
+    ? baseDescription
+    : `${baseDescription}${separator}${t(lang, 'seo.toolDescSuffix')}`.trim();
 
   const body = `${head({
-    title: `${tool.name} — ${pricingLabel(lang, tool.pricing)} | SoMarkIt`,
-    description: tool.description || siteDesc,
-    canonical: `https://somarkit.com${localePath(lang, `/tools/${tool.slug}`)}`,
+    title: pageTitle,
+    description,
+    canonical,
+    keywords: [tool.name, `${tool.name} ${t(lang, 'card.review')}`, catName, t(lang, 'seo.keywords')].join(','),
+    ogType: 'article',
+    modifiedTime: tool.updated_at || '',
     jsonLd,
     theme,
     lang,
@@ -707,17 +824,20 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
       <div class="detail-card">
         <div class="detail-head">
           ${logoBox(tool, 'detail-logo')}
-          <h1 class="detail-title">
-            ${esc(tool.name)}
+          <h1 class="detail-title">${esc(t(lang, 'seo.toolH1', tool.name))}</h1>
+          <div class="detail-meta">
             ${tool.is_hot ? `<span class="badge badge-hot">${esc(t(lang, 'badge.hot'))}</span>` : ''}
             ${tool.is_new ? `<span class="badge badge-new">${esc(t(lang, 'badge.new'))}</span>` : ''}
-          </h1>
-          <div class="detail-meta">
             <span class="pricing-tag pricing-${esc(tool.pricing)}">${esc(pricingLabel(lang, tool.pricing))}</span>
             <span class="detail-meta-item">${esc(catName)}</span>
             <span class="detail-meta-item">${esc(t(lang, 'detail.visits', tool.visit_count))}</span>
           </div>
         </div>
+        <p class="detail-byline">
+          <a href="${esc(localePath(lang, '/about'))}">${esc(t(lang, 'detail.author'))}</a>
+          ${tool.updated_at ? `<span class="detail-updated">${esc(t(lang, 'seo.lastUpdated', String(tool.updated_at).slice(0, 10)))}</span>` : ''}
+        </p>
+        <h2 class="sr-only">${esc(t(lang, 'detail.about'))}</h2>
         <div class="detail-body">${esc(tool.description || t(lang, 'card.noDesc'))}</div>
         ${tags ? `<div class="tool-tags" style="margin-bottom:24px">${tags}</div>` : ''}
         <div class="detail-cta">
@@ -732,6 +852,7 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
           ${reviewHtml}
         </section>` : ''}
       </div>
+      <h2 class="sr-only">${esc(t(lang, 'detail.info'))}</h2>
       <div class="tool-info-grid">
         <div class="tool-info-card">
           <div class="info-label">${esc(t(lang, 'detail.infoCategory'))}</div>
@@ -752,7 +873,7 @@ export function toolPage({ tool, categories, counts, related, total, theme, lang
             : '—'}</div>
         </div>
       </div>
-      ${related.length ? `<h2 style="font-size:var(--text-lg);margin:36px 0 14px">${esc(t(lang, 'detail.related'))}</h2>
+      ${related.length ? `<h2 class="detail-section-title">${esc(t(lang, 'detail.related'))}</h2>
         <div class="tools-grid">${relatedCards}</div>` : ''}
     </main>
     ${footer(new Date().getFullYear(), lang, basePath)}
@@ -765,37 +886,116 @@ ${pageLoader()}
   return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
-export function categoryPage({ category, categories, counts, tools, allTools, featured, total, catCount, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
-  // Ship every category (not just this one) so switching to another category
-  // can be handled client-side, exactly like on the home page. Each section is
-  // capped at one page; the active one streams the rest on scroll because
-  // contentArea() is told to paginate it.
-  const groups = groupByCategory(categories, allTools || tools, RAIL_PAGE_SIZE);
+export function categoryPage({ category, categories, counts, tools, featured, total, catCount, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false, page = 1 }) {
+  // Only the active category is rendered. Shipping every other category in a
+  // display:none container made each category page a near-copy of the whole
+  // catalogue; the sidebar already links to the others with real navigation.
+  const PAGE_SIZE = RAIL_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(tools.length / PAGE_SIZE));
+  const currentPage = Math.min(Math.max(1, Number(page) || 1), totalPages);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageTools = tools.slice(start, start + PAGE_SIZE);
+  const groups = [{
+    category,
+    tools: pageTools,
+    total: tools.length,
+    remaining: Math.max(0, tools.length - start - pageTools.length),
+  }];
   const catName = categoryLabel(category, lang);
+  const year = new Date().getFullYear();
+  const baseCanonical = `https://somarkit.com${localePath(lang, `/${category.slug}`)}`;
+  const canonical = currentPage > 1 ? `${baseCanonical}?page=${currentPage}` : baseCanonical;
+  const h1 = t(lang, 'seo.categoryH1', catName);
+  const titleFull = `${t(lang, 'seo.categoryTitle', catName, year)} | SoMarkIt`;
+  const pageTitle = currentPage > 1
+    ? `${catName}${t(lang, 'seo.pageSuffix', currentPage)} | SoMarkIt`
+    : (displayWidth(titleFull) <= 60 ? titleFull : `${catName} | SoMarkIt`);
+  const baseDescription = t(lang, 'seo.categoryDesc', catName);
+  const description = currentPage > 1
+    ? `${baseDescription}${t(lang, 'seo.pageDescSuffix', currentPage)}`
+    : baseDescription;
+  const descLength = [...String(category.description || '')].length;
+  const intro = descLength >= 80
+    ? category.description
+    : (category.description
+      ? `${category.description} ${t(lang, 'seo.categoryIntro', catName)}`
+      : t(lang, 'seo.categoryIntro', catName));
+  const keywords = [catName, t(lang, 'seo.keywords')].join(',');
+  const heroBreadcrumb = `<a href="${esc(localePath(lang, '/'))}">${esc(t(lang, 'detail.home'))}</a><span aria-hidden="true">/</span><span>${esc(catName)}</span>`;
+  const relatedCategories = categories
+    .filter((c) => c.id !== category.id)
+    .slice(0, 6)
+    .map((c) => ({
+      name: categoryLabel(c, lang),
+      href: localePath(lang, `/${c.slug}`),
+      count: counts[c.id] || 0,
+      icon: c.icon || 'grid',
+    }));
+  // The right column of the hero is never left empty: a category with tools
+  // shows its own top picks, an empty one falls back to the site-wide trending
+  // pair (same card design, honest heading).
+  const categoryPicks = tools
+    .slice()
+    .sort((a, b) => (Number(b.visit_count) || 0) - (Number(a.visit_count) || 0)
+      || (Number(b.is_hot) || 0) - (Number(a.is_hot) || 0))
+    .slice(0, 2);
+  const heroFeatured = categoryPicks.length ? categoryPicks : featured;
+  const heroFeaturedTitle = categoryPicks.length ? t(lang, 'seo.categoryFeatured') : t(lang, 'hero.featured');
   const jsonLd = [
     {
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
-      name: `${catName} — SoMarkIt`,
-      description: category.description || `${catName} — SoMarkIt`,
-      url: `https://somarkit.com/${category.slug}`,
+      name: h1,
+      description,
+      url: canonical,
+      inLanguage: langMeta(lang).htmlLang,
+      isPartOf: { '@type': 'WebSite', name: 'SoMarkIt', url: `https://somarkit.com${localePath(lang, '/')}` },
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: t(lang, 'detail.home'), item: `https://somarkit.com${localePath(lang, '/')}` },
+        { '@type': 'ListItem', position: 2, name: catName, item: canonical },
+      ],
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: h1,
+      numberOfItems: pageTools.length,
+      itemListElement: pageTools.map((x, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: x.name,
+        url: `https://somarkit.com${localePath(lang, `/tools/${x.slug}`)}`,
+      })),
     },
   ];
 
   return new Response(
     shell({
-      title: `${catName} — SoMarkIt`,
-      description: category.description || `${catName} · ${t(lang, 'content.toolsCount', tools.length)}`,
-      canonical: `https://somarkit.com${localePath(lang, `/${category.slug}`)}`,
+      title: pageTitle,
+      description,
+      keywords,
+      canonical,
       jsonLd,
-      categories, counts, groups, total, featured,
+      categories, counts, groups, total, featured: heroFeatured,
       activeSlug: category.slug, theme, lang, gaId, basePath, unprefixed,
-      // Full catalogue present → client-side switching, same as home.
-      mode: 'all',
+      heroTitleLines: [h1],
+      heroSubtitle: intro,
+      heroShowFeatured: true,
+      featuredTitle: heroFeaturedTitle,
+      heroBreadcrumb,
+      relatedCategories,
+      mode: 'subset',
       initialVisibleCount: tools.length,
-      // The reader explicitly asked for this category, so its section streams
-      // the remaining tools on scroll (the home page does not).
-      paginateActive: true,
+      page: currentPage,
+      totalPages,
+      pagePath: `/${category.slug}`,
+      noHreflang: currentPage > 1,
+      // Page 1 keeps the scroll stream; later pages are plain crawlable lists.
+      paginateActive: currentPage === 1,
     }),
     { headers: { 'content-type': 'text/html; charset=utf-8' } }
   );
@@ -890,16 +1090,51 @@ ${pageLoader()}
   );
 }
 
-export function aboutPage({ categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {  // Body copy lives in the dictionaries (about.*) so every locale is translated
+export function aboutPage({ categories, counts, total, theme, lang = DEFAULT_LANG, gaId = '', basePath = '/', unprefixed = false }) {
+  // Body copy lives in the dictionaries (about.*) so every locale is translated
   // by the same table rather than by an if/else in this template.
+  const canonical = `https://somarkit.com${localePath(lang, '/about')}`;
+  const updated = (categories || [])
+    .map((c) => String(c.updated_at || '').slice(0, 10))
+    .filter(Boolean)
+    .sort()
+    .pop() || '';
+  const jsonLd = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'AboutPage',
+      name: t(lang, 'about.h1'),
+      description: t(lang, 'seo.aboutDesc'),
+      url: canonical,
+      inLanguage: langMeta(lang).htmlLang,
+      isPartOf: { '@type': 'WebSite', name: 'SoMarkIt', url: `https://somarkit.com${localePath(lang, '/')}` },
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: 'SoMarkIt',
+      url: 'https://somarkit.com/',
+      logo: 'https://somarkit.com/apple-touch-icon.png',
+      description: t(lang, 'seo.siteDesc'),
+      email: 'support@somarkit.com',
+      contactPoint: {
+        '@type': 'ContactPoint',
+        contactType: 'customer support',
+        email: 'support@somarkit.com',
+        availableLanguage: ['zh', 'en', 'ja', 'ko'],
+      },
+    },
+  ];
   const body = `${head({
-    title: t(lang, 'about.title'),
-    description: t(lang, 'seo.siteDesc'),
-    canonical: `https://somarkit.com${localePath(lang, '/about')}` ,
-    jsonLd: [],
+    title: t(lang, 'seo.aboutTitle'),
+    description: t(lang, 'seo.aboutDesc'),
+    keywords: [t(lang, 'about.h1'), 'SoMarkIt', 'AI 工具导航', 'AI tools directory'].join(','),
+    canonical,
+    jsonLd,
     theme,
     lang,
     gaId,
+    noindex: unprefixed,
   })}
 <body>
 <div class="app-layout">
@@ -910,18 +1145,31 @@ export function aboutPage({ categories, counts, total, theme, lang = DEFAULT_LAN
     <main id="main-content" class="detail-wrap">
       <div class="detail-card">
         <h1 class="detail-title">${esc(t(lang, 'about.h1'))}</h1>
+        <h2 class="detail-section-title">${esc(t(lang, 'about.h2Who'))}</h2>
         <div class="detail-body">
           <p>${esc(t(lang, 'about.p1'))}</p>
           <p>${esc(t(lang, 'about.p2'))}</p>
-          <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">${esc(t(lang, 'about.h2What'))}</h2>
-          <ul style="padding-left:20px">
-            <li>${esc(t(lang, 'about.li1'))}</li>
-            <li>${esc(t(lang, 'about.li2'))}</li>
-            <li>${esc(t(lang, 'about.li3'))}</li>
-          </ul>
-          <h2 style="font-size:var(--text-lg);color:var(--text-primary);margin:24px 0 8px">${esc(t(lang, 'about.h2Submit'))}</h2>
-          <p>${esc(t(lang, 'about.submitNote'))}</p>
         </div>
+        <h2 class="detail-section-title">${esc(t(lang, 'about.h2Team'))}</h2>
+        <p class="detail-body">${esc(t(lang, 'about.teamBio'))}</p>
+        <h2 class="detail-section-title">${esc(t(lang, 'about.h2How'))}</h2>
+        <ul class="detail-list">
+          <li>${esc(t(lang, 'about.how1'))}</li>
+          <li>${esc(t(lang, 'about.how2'))}</li>
+          <li>${esc(t(lang, 'about.how3'))}</li>
+        </ul>
+        <h2 class="detail-section-title">${esc(t(lang, 'about.h2What'))}</h2>
+        <ul class="detail-list">
+          <li>${esc(t(lang, 'about.li1'))}</li>
+          <li>${esc(t(lang, 'about.li2'))}</li>
+          <li>${esc(t(lang, 'about.li3'))}</li>
+        </ul>
+        <h2 class="detail-section-title">${esc(t(lang, 'about.h2Fix'))}</h2>
+        <p class="detail-body">${esc(t(lang, 'about.fixNote'))}</p>
+        <h2 class="detail-section-title">${esc(t(lang, 'about.h2Contact'))}</h2>
+        <p class="detail-body">${esc(t(lang, 'about.contactNote'))}</p>
+        <p class="detail-body"><a href="mailto:support@somarkit.com">support@somarkit.com</a></p>
+        ${updated ? `<p class="detail-updated">${esc(t(lang, 'seo.lastUpdated', updated))}</p>` : ''}
       </div>
     </main>
     ${footer(new Date().getFullYear(), lang, basePath)}

@@ -282,3 +282,26 @@ INSERT INTO tools (slug, name, url, description, category_id, tags, pricing, is_
 ('huashu', 'AI 绘图助手', 'https://www.midjourney.com', '借助文生图工具快速产出文章配图与封面，配合提示词模板可以批量生成统一风格的视觉素材。', (SELECT id FROM categories WHERE slug='ai-media'), '配图,封面,批量,模板', 'paid', 0, 0, 0, 'published', 3),
 ('buffer-ai', 'Buffer AI', 'https://buffer.com', '社交媒体排程工具，内置 AI 助手生成与改写帖子文案，支持多平台统一调度发布。', (SELECT id FROM categories WHERE slug='ai-media'), '社媒,排程,文案,多平台', 'freemium', 0, 0, 0, 'published', 4),
 ('pictory', 'Pictory', 'https://pictory.ai', '把长文章或脚本自动转成带字幕与配图的短视频，适合把图文内容二次分发到视频平台。', (SELECT id FROM categories WHERE slug='ai-media'), '图文转视频,字幕,分发,短视频', 'paid', 0, 0, 0, 'published', 5);
+
+-- ===========================================================================
+-- Translations for the two flagship tools. New tools should carry their own
+-- `description_en / description_ja / description_ko` at insert time; this block
+-- only keeps a fresh seed consistent with migration 005 on an existing DB.
+-- ===========================================================================
+UPDATE tools SET
+  description_en = 'OpenAI''s general-purpose AI assistant, with GPT models, web search, image understanding, file analysis and custom GPTs — one of the most widely used conversational AI products.',
+  description_ja = 'OpenAI の汎用 AI アシスタント。GPT シリーズ、Web 検索、画像理解、ファイル分析、カスタム GPTs に対応し、最も広く使われている対話型 AI のひとつです。',
+  description_ko = 'OpenAI의 범용 AI 어시스턴트로, GPT 시리즈 모델, 웹 검색, 이미지 이해, 파일 분석, 커스텀 GPTs를 지원하는 대표적인 대화형 AI입니다.',
+  tags_en = 'Chat,Writing,Coding,Multimodal',
+  tags_ja = '対話,執筆,コーディング,マルチモーダル',
+  tags_ko = '대화,글쓰기,코딩,멀티모달'
+WHERE slug = 'chatgpt';
+
+UPDATE tools SET
+  description_en = 'Anthropic''s AI assistant, known for long-document understanding, careful reasoning and coding, with Artifacts previews and Projects workspaces for complex analysis.',
+  description_ja = 'Anthropic の AI アシスタント。長文理解、慎重な推論、コーディングに強く、Artifacts のプレビューと Projects で複雑な分析に向いています。',
+  description_ko = 'Anthropic의 AI 어시스턴트로, 장문 이해, 신중한 추론, 코딩 능력이 뛰어나며 Artifacts 미리보기와 Projects 작업 공간을 지원합니다.',
+  tags_en = 'Chat,Long context,Coding,Analysis',
+  tags_ja = '対話,長文,コーディング,分析',
+  tags_ko = '대화,장문,코딩,분석'
+WHERE slug = 'claude';

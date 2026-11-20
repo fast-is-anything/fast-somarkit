@@ -262,6 +262,34 @@ GA_SERVICE_ACCOUNT={"type":"service_account","project_id":"...", ...}
 ### 新增工具
 后台 → 工具管理 → **新增工具**，或用批量导入。
 
+### SEO 审计
+
+```bash
+npm run seo:audit
+# 或只查指定页面
+node scripts/seo-audit.mjs --url=https://somarkit.com/zh/about --no-sitemap
+# 本地（先 npm run dev）
+node scripts/seo-audit.mjs --base=http://127.0.0.1:8799 --no-sitemap --url=/zh --url=/zh/ai-chat
+```
+
+脚本复刻 AITDK 的 TDK / H1–H6 读取，并补充 canonical、hreflang、JSON-LD、重复 TDK、sitemap 一致性检查。输出在 `.research/seo-audit/`：
+
+- `seo-audit.html`：可筛选的页面卡片（TDK + 标题树 + 逐页问题）
+- `seo-audit.md`：表格版
+- `seo-audit.json`：原始数据，可接 CI
+
+### SEO 内容迁移（005–007）
+
+已有库需要按顺序执行一次；新库在 `db:seed` 之后执行：
+
+```bash
+npx wrangler d1 execute somarkit --remote --file=./db/migrations/005_seo_translations.sql
+npx wrangler d1 execute somarkit --remote --file=./db/migrations/006_category_intros.sql
+npx wrangler d1 execute somarkit --remote --file=./db/migrations/007_tool_reviews.sql
+```
+
+本地把 `--remote` 换成 `--local`。
+
 ### 批量导入 CSV
 
 模板表头：

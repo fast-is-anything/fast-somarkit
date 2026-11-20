@@ -109,6 +109,22 @@ function getMd() {
 
   md.use(footnote);
 
+  // Review bodies are rendered inside a page that already owns the only H1.
+  // Normalise the document's top heading to H2 and shift the rest relatively,
+  // so authors can start at `#` or `##` without creating a second H1 or
+  // skipping a level.
+  md.core.ruler.push('normalize_review_headings', (state) => {
+    const opens = state.tokens.filter((token) => token.type === 'heading_open');
+    if (!opens.length) return;
+    const min = Math.min(...opens.map((token) => Number(token.tag.slice(1))));
+    const shift = 2 - min;
+    for (const token of state.tokens) {
+      if (token.type !== 'heading_open' && token.type !== 'heading_close') continue;
+      const level = Math.min(6, Math.max(2, Number(token.tag.slice(1)) + shift));
+      token.tag = `h${level}`;
+    }
+  });
+
   // Heading anchors (slug instead of URL-encoded ids).
   md.use((instance) => {
     instance.core.ruler.push('heading_anchors', (state) => {
